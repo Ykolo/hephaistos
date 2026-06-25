@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Héphaïstos — Front-end
 
-## Getting Started
+Site vitrine / e-commerce **mobile-first** pour la marque de soins visage homme
+**Héphaïstos** (« Se forger, chaque jour. »). Implémentation front-end fidèle
+à la maquette `Hephaistos Mobile.dc.html` (Claude Design).
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Next.js 16** (App Router, React 19, React Compiler) + **TypeScript**
+- **Tailwind CSS v4** — palette de marque + keyframes dans `src/app/globals.css`
+- **shadcn/ui** — primitives UI (`src/components/ui`)
+- **Framer Motion** — reveals au scroll, transitions de page, overlays, curseur custom
+- **Zustand** — état UI global (menu, panier, recherche, annonce, curseur) avec
+  persistance de la préférence de curseur
+- **TanStack Query** — couche données du catalogue (mock async, prête pour un vrai backend)
+
+## Routes (9)
+
+| Route             | Page                                  |
+| ----------------- | ------------------------------------- |
+| `/`               | Accueil (hero, manifeste, collection) |
+| `/boutique`       | Les Fondations (collection)           |
+| `/produit/[id]`   | Page produit (galerie, accordéons)    |
+| `/histoire`       | L'histoire de la marque               |
+| `/vision`         | Roadmap / vision                      |
+| `/avis`           | Avis & avant/après                    |
+| `/contact`        | Formulaire de contact                 |
+| `/newsletter`     | Accès prioritaire                     |
+| `/legal`          | Mentions & conditions (onglets)       |
+
+## Structure
+
+```
+src/
+  app/                 routes (App Router) + layout + globals.css
+  components/
+    ui/                shadcn/ui
+    site-chrome.tsx    orchestrateur (header, footer, overlays, curseur)
+    header / footer / mobile-menu / cart-drawer / search-overlay
+    custom-cursor.tsx  curseur « forge » + sélecteur (desktop)
+    reveal.tsx         wrapper reveal-au-scroll (Framer Motion)
+    product-*.tsx      carte, grille, détail produit
+    primitives.tsx     boutons / labels réutilisables
+  hooks/               useIsMobile, useHasFinePointer
+  lib/                 products (data), queries (TanStack), routes
+  store/               ui-store (Zustand)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Développement
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+bun install
+bun run dev      # http://localhost:3000
+bun run build    # build de production
+bun run start    # sert le build
+bun run lint
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> Front-end uniquement : le catalogue est statique et résolu via une couche
+> TanStack Query, prête à brancher sur une vraie API. Les formulaires
+> (contact, newsletter) sont simulés côté client.
