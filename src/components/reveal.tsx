@@ -1,27 +1,25 @@
 "use client";
 
-import { motion, useReducedMotion, type HTMLMotionProps } from "framer-motion";
+import type { CSSProperties, ReactNode } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 
-type RevealProps = HTMLMotionProps<"div"> & {
+type RevealProps = {
+  children?: ReactNode;
   delay?: number;
+  className?: string;
+  style?: CSSProperties;
 };
 
 /**
  * Scroll-reveal wrapper mirroring the source app's `data-reveal` behaviour:
  * fade + 26px rise, triggered once when the element enters the viewport.
  */
-export function Reveal({
-  children,
-  delay = 0,
-  style,
-  className,
-  ...rest
-}: RevealProps) {
+export function Reveal({ children, delay = 0, style, className }: RevealProps) {
   const reduce = useReducedMotion();
 
   if (reduce) {
     return (
-      <div className={className} style={style as React.CSSProperties}>
+      <div className={className} style={style}>
         {children}
       </div>
     );
@@ -39,7 +37,6 @@ export function Reveal({
         delay: delay / 1000,
         ease: [0.16, 0.84, 0.44, 1],
       }}
-      {...rest}
     >
       {children}
     </motion.div>
