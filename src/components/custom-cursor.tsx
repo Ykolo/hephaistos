@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   AnimatePresence,
   motion,
@@ -29,6 +29,44 @@ const DOT: Record<CursorMode, string> = {
   none: "hidden",
 };
 
+// Variants used when the cursor sits over a dark surface, so it stays visible.
+const RING_DARK: Record<CursorMode, string> = {
+  forge: "h-[46px] w-[46px] border border-[rgba(255,150,80,.5)]",
+  ring: "h-[34px] w-[34px] border-[1.5px] border-cream",
+  point: "h-0 w-0 opacity-0",
+  lueur:
+    "h-[52px] w-[52px] bg-[radial-gradient(circle,rgba(242,240,236,.18),transparent_70%)]",
+  none: "hidden",
+};
+
+const DOT_DARK: Record<CursorMode, string> = {
+  forge:
+    "h-[10px] w-[10px] bg-ember shadow-[0_0_12px_4px_rgba(255,110,20,.55)]",
+  ring: "h-[6px] w-[6px] bg-cream",
+  point: "h-[13px] w-[13px] bg-cream",
+  lueur: "h-[5px] w-[5px] bg-cream",
+  none: "hidden",
+};
+
+// Walk up from the element under the pointer to the first opaque background
+// color and decide whether it is dark.
+function isOverDarkSurface(x: number, y: number): boolean {
+  let el: Element | null = document.elementFromPoint(x, y);
+  while (el) {
+    const bg = getComputedStyle(el).backgroundColor;
+    const m = bg.match(/rgba?\(([^)]+)\)/);
+    if (m) {
+      const [r, g, b, a = 1] = m[1].split(",").map((v) => parseFloat(v));
+      if (a > 0.5) {
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        return luminance < 0.4;
+      }
+    }
+    el = el.parentElement;
+  }
+  return false;
+}
+
 const OPTIONS: { mode: CursorMode; label: string; swatch: string }[] = [
   { mode: "forge", label: "Forge", swatch: "bg-ember" },
   { mode: "ring", label: "Anneau", swatch: "bg-ink" },
@@ -49,16 +87,27 @@ export function CustomCursor() {
   const ringX = useSpring(mouseX, { stiffness: 350, damping: 30, mass: 0.4 });
   const ringY = useSpring(mouseY, { stiffness: 350, damping: 30, mass: 0.4 });
 
+  const [onDark, setOnDark] = useState(false);
+
   const active = fine && cursor !== "none";
 
   useEffect(() => {
     if (!active) return;
+    let frame = 0;
     const move = (e: MouseEvent) => {
       mouseX.set(e.clientX);
       mouseY.set(e.clientY);
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        setOnDark(isOverDarkSurface(e.clientX, e.clientY));
+      });
     };
     window.addEventListener("mousemove", move);
-    return () => window.removeEventListener("mousemove", move);
+    return () => {
+      window.removeEventListener("mousemove", move);
+      if (frame) cancelAnimationFrame(frame);
+    };
   }, [active, mouseX, mouseY]);
 
   useEffect(() => {
@@ -76,13 +125,23 @@ export function CustomCursor() {
             style={{ x: ringX, y: ringY }}
             className="absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2"
           >
-            <div className={cn("rounded-full", RING[cursor])} />
+            <div
+              className={cn(
+                "rounded-full",
+                (onDark ? RING_DARK : RING)[cursor],
+              )}
+            />
           </motion.div>
           <motion.div
             style={{ x: mouseX, y: mouseY }}
             className="absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2"
           >
-            <div className={cn("rounded-full", DOT[cursor])} />
+            <div
+              className={cn(
+                "rounded-full",
+                (onDark ? DOT_DARK : DOT)[cursor],
+              )}
+            />
           </motion.div>
         </div>
       )}
