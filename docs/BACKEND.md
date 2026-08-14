@@ -27,6 +27,9 @@ document décrit le **comment** côté dev, et sert de source aux sous-issues.
 | Validation | **Zod** | Schémas partagés client/serveur, messages en français |
 | Anti-bot | **Vercel BotID** + honeypot | Formulaires publics |
 | Erreurs | **Sentry** | Alerte prioritaire sur webhook Stripe en échec |
+| Consentement | **Bannière maison** (CNIL) | Obligatoire dès qu'on charge GA4 ou Meta. Refus en un clic, preuve conservée |
+| Mesure d'audience | **GA4** + Consent Mode v2 | Les 4 signaux, `denied` par défaut |
+| Conversions publicitaires | **Meta CAPI** (serveur) + pixel | L'achat part du webhook Stripe, dédupliqué avec le pixel par `event_id` |
 
 **Shopify et Klaviyo sont abandonnés.** Les issues HEP-14 (webhooks Shopify) et
 HEP-15 (Klaviyo) sont caduques, ainsi que la mention « Hébergement : Shopify Inc. »
@@ -381,8 +384,10 @@ Alerte Sentry sur tout échec : c'est là qu'on perd de l'argent silencieusement
 | 9 | HEP-30 | Back-office : accès 2FA, tableau de bord, réglages, pages légales | 5–6 j | — |
 | 10 | HEP-31 | Tests des 3 pièges, e2e, audit externe, go-live | 4–5 j | mise en ligne |
 | 11 | HEP-88 | Contact et avis clients (ajout au cadrage) | 1,5–2,5 j | — |
+| 12 | HEP-91 | Consentement CNIL, GA4 Consent Mode v2, Meta CAPI serveur | 2,5–3,5 j | mise en ligne |
+| 13 | HEP-92 | SEO technique : sitemap, robots, metadata, JSON-LD | 1,5–2 j | — |
 
-**Total : 38–49 jours.** Ordre : 1 → 2 → 3 → 4 → 5 est la chaîne critique ; 6, 7,
+**Total : 42–54,5 jours.** Ordre : 1 → 2 → 3 → 4 → 5 est la chaîne critique ; 6, 7,
 8 se parallélisent une fois le lot 4 posé ; 9 se construit au fil de l'eau (chaque
 lot livre son écran d'admin) ; 10 est bloquant avant la première vente réelle.
 
@@ -391,7 +396,15 @@ Jules n'a rien pour tester pendant deux mois. Le lot 11 est un ajout au cadrage
 d'origine : le formulaire de contact et les avis existent déjà à l'écran sur le
 site et ne fonctionnent pas.
 
-Chaque lot est découpé en sous-issues Linear (HEP-32 → HEP-90), avec pour chacune
+Le **lot 12 n'est pas repoussable après le lot 5** : la mesure serveur des
+conversions part du webhook Stripe, et les champs de consentement et
+d'attribution (`consentMarketing`, `fbp`, `fbc`, `clientIp`, `clientUserAgent`)
+doivent entrer dans la **même migration** que la table `Order`. Ajoutés après, ils
+imposent de migrer une base de commandes déjà remplie et font perdre
+définitivement les conversions des premières ventes — celles qui servent à
+calibrer les campagnes de lancement.
+
+Chaque lot est découpé en sous-issues Linear (HEP-32 → HEP-100), avec pour chacune
 le travail, les pièges identifiés et une definition of done.
 
 ---
@@ -404,7 +417,7 @@ le travail, les pièges identifiés et une definition of done.
 | Format SKU définitif et référentiel des lots | Anita | Bloque le schéma produits du lot 2 |
 | Seuil de livraison offerte, grille poids/tarif | Jules | Bloque le lot 7 |
 | Mentions légales réelles : SIRET, capital, TVA intracom, directeur de publication | Jules | Bloque la mise en ligne. `legalContent` annonce aujourd'hui Shopify : **faux** |
-| Bandeau cookies | — | Évitable si on s'en tient à Vercel Analytics (sans cookie) |
+| ~~Bandeau cookies~~ **tranché** | Bannière obligatoire | GA4 + Meta rendent l'exemption impossible. Pour l'éviter, il faudrait renoncer aux deux et s'en tenir à Vercel Analytics — arbitrage acquisition contre simplicité, à confirmer par Jules (HEP-91) |
 | Comptes clients : au lancement ou après ? | Jules | HEP-27 dit oui ; le checkout invité reste obligatoire dans les deux cas |
 
 ---
