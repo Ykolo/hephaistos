@@ -8,11 +8,18 @@ import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { MobileMenu } from "@/components/mobile-menu";
 import { CartDrawer } from "@/components/cart-drawer";
-import { SearchOverlay } from "@/components/search-overlay";
+import { SearchOverlay, type SearchItem } from "@/components/search-overlay";
 import { CustomCursor } from "@/components/custom-cursor";
 import { useUIStore } from "@/store/ui-store";
 
-export function SiteChrome({ children }: { children: React.ReactNode }) {
+export function SiteChrome({
+  children,
+  searchProducts,
+}: {
+  children: React.ReactNode;
+  /** Résolu côté serveur dans le layout — le chrome ne fait que le relayer. */
+  searchProducts: SearchItem[];
+}) {
   const pathname = usePathname();
   const closeAllOverlays = useUIStore((s) => s.closeAllOverlays);
 
@@ -39,7 +46,7 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
 
       <MobileMenu />
       <CartDrawer />
-      <SearchOverlay />
+      <SearchOverlay products={searchProducts} />
       <CustomCursor />
     </div>
   );

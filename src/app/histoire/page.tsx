@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { CoverImage } from "@/components/cover-image";
 import { Reveal } from "@/components/reveal";
 import { NewsletterBand } from "@/components/newsletter-band";
-import { heroImages } from "@/lib/products";
+import { heroImages } from "@/lib/content";
 
 export const metadata: Metadata = {
   title: "L'histoire — Le feu qui forge l'acier | Héphaïstos",

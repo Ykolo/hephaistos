@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { legalContent, legalTabs, type LegalKey } from "@/lib/products";
+import { legalContent, legalTabs, type LegalKey } from "@/lib/content";
 import { cn } from "@/lib/utils";
 
 const keys = legalTabs.map((t) => t.key);

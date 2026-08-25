@@ -13,7 +13,8 @@ import {
   textLink,
 } from "@/components/primitives";
 import { routes } from "@/lib/routes";
-import { heroImages } from "@/lib/products";
+import { heroImages } from "@/lib/content";
+import { getProducts } from "@/server/catalog";
 
 const reviews = [
   {
@@ -27,7 +28,9 @@ const reviews = [
   },
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  const products = await getProducts();
+
   return (
     <div>
       {/* HERO */}
@@ -140,7 +143,7 @@ export default function HomePage() {
             Tout voir →
           </Link>
         </Reveal>
-        <ProductGrid />
+        <ProductGrid products={products} />
       </section>
 
       {/* SE FORGER EDITORIAL */}

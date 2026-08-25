@@ -4,12 +4,23 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { routes } from "@/lib/routes";
 import { useUIStore } from "@/store/ui-store";
-import { useProducts } from "@/lib/queries";
+import { formatPriceCompact } from "@/lib/format";
 
-export function SearchOverlay() {
+/**
+ * Projection minimale : cette liste est sérialisée dans le HTML de **chaque**
+ * page, puisque la recherche vit dans le chrome. Y envoyer les descriptions,
+ * les INCI et les galeries alourdirait tout le site pour un panneau que la
+ * plupart des visiteurs n'ouvriront jamais.
+ */
+export type SearchItem = {
+  slug: string;
+  name: string;
+  priceCents: number;
+};
+
+export function SearchOverlay({ products }: { products: SearchItem[] }) {
   const open = useUIStore((s) => s.searchOpen);
   const close = useUIStore((s) => s.closeSearch);
-  const { data: products = [] } = useProducts();
 
   return (
     <AnimatePresence>
@@ -43,13 +54,15 @@ export function SearchOverlay() {
             <div className="flex flex-col gap-1">
               {products.map((p) => (
                 <Link
-                  key={p.id}
-                  href={routes.product(p.id)}
+                  key={p.slug}
+                  href={routes.product(p.slug)}
                   onClick={close}
                   className="flex items-center justify-between border-b border-line-soft py-4"
                 >
                   <span className="font-serif text-[1.3rem]">{p.name}</span>
-                  <span className="text-[13px] text-muted-ink">{p.price}€</span>
+                  <span className="text-[13px] text-muted-ink">
+                    {formatPriceCompact(p.priceCents)}
+                  </span>
                 </Link>
               ))}
             </div>

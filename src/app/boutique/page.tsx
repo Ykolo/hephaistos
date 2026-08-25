@@ -3,6 +3,7 @@ import { Reveal } from "@/components/reveal";
 import { NewsletterBand } from "@/components/newsletter-band";
 import { ProductGrid } from "@/components/product-grid";
 import { Eyebrow } from "@/components/primitives";
+import { getProducts } from "@/server/catalog";
 
 export const metadata: Metadata = {
   title: "Les Fondations — Boutique | Héphaïstos",
@@ -12,7 +13,9 @@ export const metadata: Metadata = {
 
 const filters = ["Tous", "Nettoyage", "Soin ciblé", "Hydratation"];
 
-export default function BoutiquePage() {
+export default async function BoutiquePage() {
+  const products = await getProducts();
+
   return (
     <div>
       <section className="mx-auto max-w-[1320px] px-6 pb-[clamp(30px,4vw,50px)] pt-[clamp(60px,9vw,120px)] text-center sm:px-14">
@@ -48,7 +51,7 @@ export default function BoutiquePage() {
             </span>
           ))}
         </Reveal>
-        <ProductGrid withSoon />
+        <ProductGrid products={products} withSoon />
       </section>
 
       <NewsletterBand />

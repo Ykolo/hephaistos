@@ -6,8 +6,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { CoverImage } from "@/components/cover-image";
 import { Reveal } from "@/components/reveal";
 import { NewsletterBand } from "@/components/newsletter-band";
-import { useProduct, useProducts } from "@/lib/queries";
+import { formatPriceCompact } from "@/lib/format";
 import { routes } from "@/lib/routes";
+import type { ProductView } from "@/lib/products";
 
 const reassurance = [
   { t: "Fabriqué en France", d: "Formulation locale" },
@@ -15,7 +16,8 @@ const reassurance = [
   { t: "Envoi soigné", d: "Expédié sous 48h" },
 ];
 
-const precautions =
+/** Repli tant que la fiche produit n'a pas ses précautions renseignées en base. */
+const DEFAULT_PRECAUTIONS =
   "Usage externe uniquement. Éviter le contour des yeux. En cas de contact, rincer abondamment. Tenir hors de portée des enfants. Conserver à l'abri de la chaleur. Cesser l'utilisation en cas de réaction.";
 
 type AccKey = "benef" | "usage" | "compo" | "prec" | "";
@@ -59,14 +61,21 @@ function Accordion({
   );
 }
 
-export function ProductDetail({ id }: { id: string }) {
-  const { data: current } = useProduct(id);
-  const { data: products = [] } = useProducts();
+/**
+ * Fiche produit. Reste un composant client pour les accordéons et le sélecteur
+ * de quantité, mais ne va plus chercher ses données : elles arrivent en props
+ * depuis le rendu serveur (HEP-45).
+ */
+export function ProductDetail({
+  product: current,
+  related,
+}: {
+  product: ProductView;
+  related: ProductView[];
+}) {
   const [qty, setQty] = useState(1);
   const [acc, setAcc] = useState<AccKey>("benef");
 
-  if (!current) return null;
-  const related = products.filter((p) => p.id !== id);
   const toggle = (k: AccKey) => setAcc((cur) => (cur === k ? "" : k));
 
   return (
@@ -85,7 +94,7 @@ export function ProductDetail({ id }: { id: string }) {
         <div className="md:sticky md:top-[90px]">
           <div className="relative mb-[14px] aspect-[4/5] overflow-hidden bg-sand-card">
             <CoverImage
-              src={current.gallery[0]}
+              src={current.image}
               alt={current.name}
               priority
               sizes="(max-width: 768px) 100vw, 50vw"
@@ -93,10 +102,10 @@ export function ProductDetail({ id }: { id: string }) {
           </div>
           <div className="grid grid-cols-2 gap-[14px]">
             <div className="relative aspect-square overflow-hidden bg-sand-card">
-              <CoverImage src={current.gallery[1]} sizes="25vw" />
+              <CoverImage src={current.gallery[1] ?? current.imageHover} sizes="25vw" />
             </div>
             <div className="relative aspect-square overflow-hidden bg-sand-card">
-              <CoverImage src={current.gallery[0]} sizes="25vw" />
+              <CoverImage src={current.image} sizes="25vw" />
             </div>
           </div>
         </div>
@@ -104,7 +113,7 @@ export function ProductDetail({ id }: { id: string }) {
         {/* info */}
         <div>
           <div className="mb-[18px] text-[11px] uppercase tracking-[.3em] text-muted-ink">
-            {current.cat}
+            {current.category}
           </div>
           <h1 className="m-0 mb-[14px] font-serif text-[clamp(2.1rem,4.5vw,3.3rem)] font-normal leading-[1.04] tracking-[-.02em]">
             {current.name}
@@ -113,13 +122,15 @@ export function ProductDetail({ id }: { id: string }) {
             {current.tagline}
           </p>
           <div className="mb-[30px] flex items-center gap-[18px]">
-            <span className="font-serif text-[1.7rem]">{current.price}€</span>
+            <span className="font-serif text-[1.7rem]">
+              {formatPriceCompact(current.priceCents)}
+            </span>
             <span className="text-[11px] uppercase tracking-[.16em] text-ink">
               ★★★★★ <span className="text-muted-ink2">· Programme pilote</span>
             </span>
           </div>
           <p className="m-0 mb-8 max-w-[46ch] text-[15px] leading-[1.75] text-body">
-            {current.desc}
+            {current.description}
           </p>
 
           {/* quantity + CTA */}
@@ -202,7 +213,7 @@ export function ProductDetail({ id }: { id: string }) {
               title="Précautions"
             >
               <div className="text-[13px] leading-[1.8] text-body">
-                {precautions}
+                {current.precautions ?? DEFAULT_PRECAUTIONS}
               </div>
             </Accordion>
           </div>
@@ -222,14 +233,14 @@ export function ProductDetail({ id }: { id: string }) {
           </Reveal>
           <div className="grid grid-cols-1 gap-[clamp(16px,2.5vw,30px)] sm:grid-cols-2">
             {related.map((p, i) => (
-              <Reveal key={p.id} delay={i * 80}>
+              <Reveal key={p.slug} delay={i * 80}>
                 <Link
-                  href={routes.product(p.id)}
+                  href={routes.product(p.slug)}
                   className="block bg-paper p-[18px]"
                 >
                   <div className="relative mb-4 aspect-square overflow-hidden bg-sand-card">
                     <CoverImage
-                      src={p.img}
+                      src={p.image}
                       alt={p.name}
                       sizes="(max-width: 640px) 100vw, 40vw"
                     />
@@ -238,7 +249,9 @@ export function ProductDetail({ id }: { id: string }) {
                     <h3 className="m-0 font-serif text-[1.15rem] font-normal">
                       {p.name}
                     </h3>
-                    <span className="font-serif">{p.price}€</span>
+                    <span className="font-serif">
+                      {formatPriceCompact(p.priceCents)}
+                    </span>
                   </div>
                 </Link>
               </Reveal>
