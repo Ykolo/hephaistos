@@ -75,24 +75,24 @@ prisma/
 Prisma en serverless doit passer par le driver adapter, sinon chaque invocation
 ouvre une connexion TCP et Neon sature.
 
-```ts
-// src/server/db.ts
-import { PrismaNeon } from "@prisma/adapter-neon";
-import { PrismaClient } from "@/generated/prisma";
+Implémenté dans `src/server/db.ts`. `DATABASE_URL` = chaîne **poolée** Neon ;
+`DIRECT_URL` = chaîne directe, pour les migrations.
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
-
-export const db =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    adapter: new PrismaNeon({ connectionString: process.env.DATABASE_URL! }),
-  });
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
-```
-
-`previewFeatures = ["driverAdapters"]` dans le generator. `DATABASE_URL` =
-chaîne **poolée** Neon ; `DIRECT_URL` = chaîne directe, pour les migrations.
+> **Corrigé à l'implémentation (HEP-33).** Ce document décrivait Prisma 6.
+> En **Prisma 7** :
+>
+> - `previewFeatures = ["driverAdapters"]` n'existe plus — les driver adapters
+>   sont le fonctionnement normal, le déclarer fait échouer la validation ;
+> - `datasource` n'accepte plus `url` ni `directUrl` dans `schema.prisma`. Les
+>   chaînes vivent dans **`prisma.config.ts`** (clé `datasource.url`, alimentée
+>   par `DIRECT_URL`) pour Migrate, et dans l'adapter du client pour le runtime ;
+> - le generator est `prisma-client` (et non `prisma-client-js`), avec `output`
+>   obligatoire — d'où `src/generated/prisma`, ignoré par git et régénéré au build.
+>
+> `src/server/db.ts` choisit son adapter selon l'hôte : Neon en preview et
+> production, `@prisma/adapter-pg` sur un Postgres classique. Sans ce second
+> cas, aucune base jetable ne peut recevoir les migrations, donc rien n'est
+> testable hors ligne (HEP-83).
 
 ### Règles transverses
 
@@ -249,7 +249,7 @@ model OrderEvent { id String @id @default(uuid()) orderId String from String? to
 model Invoice {                   // numérotation continue et sans trou (obligation FR)
   id        String @id @default(uuid())
   orderId   String @unique
-  number    String @unique        // FA-2026-000001, issu d'une séquence Postgres
+  number    String @unique        // FA-2026-000001, cf. next_invoice_number()
   blobUrl   String?
   totalCents Int
   vatCents  Int
@@ -347,6 +347,21 @@ RETURNING stock;
 
 Pour le coffret : décrémenter les composants dans un **ordre stable** (tri par
 `componentId`) pour éviter les interblocages entre deux commandes concurrentes.
+
+> Implémenté en HEP-33 comme fonction Postgres `decrement_stock(id, qty)`,
+> qui renvoie le stock restant ou `NULL` en cas de rupture. Vérifié : sur
+> 25 achats simultanés pour 10 unités, exactement 10 passent et le stock
+> tombe à 0.
+
+### 4.1 bis — La numérotation de factures
+
+`docs` annonçait une **séquence Postgres**. Une séquence ne convient pas :
+`nextval()` est non transactionnel, donc un rollback consomme le numéro et
+laisse un **trou** dans la série — exactement ce que l'administration fiscale
+interdit. La numérotation passe donc par la table `InvoiceCounter` et la
+fonction `next_invoice_number(year)`, incrémentée dans la même transaction que
+la facture : si la transaction échoue, le numéro est rendu. Vérifié par un
+rollback volontaire, qui ne consomme aucun numéro.
 
 ### 4.2 Le double débit
 

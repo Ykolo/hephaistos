@@ -1,0 +1,581 @@
+// Héphaïstos — schéma de données complet.
+//
+// Posé en une seule fois (cf. docs/BACKEND.md §3) : ajouter `country`,
+// `currency`, `lot` ou les champs d'attribution sur une base déjà pleine de
+// commandes est un chantier. Les champs de consentement et d'attribution du
+// lot 12 (HEP-91) sont donc présents dès la première migration.
+//
+// Conventions :
+//   - tous les montants en centimes (Int), jamais de flottant ;
+//   - les taux en points de base (2000 = 20,00 %).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// Prisma 7 : les chaînes de connexion ne vivent plus ici. Le runtime les
+// reçoit via l'adapter (`src/server/db.ts`, DATABASE_URL poolée) et Migrate
+// via `prisma.config.ts` (DIRECT_URL directe).
+datasource db {
+  provider = "postgresql"
+}
+
+// --- Catalogue -------------------------------------------------------------
+
+model Product {
+  id             String        @id @default(uuid())
+  slug           String        @unique // 'nettoyant', 'serum', 'creme'
+  sku            String        @unique // format à figer avec Anita (HEP-33)
+  name           String
+  tagline        String?
+  description    String
+  category       Category
+  kind           ProductKind   @default(SIMPLE)
+  priceCents     Int
+  compareAtCents Int? // prix barré (promo directe, HEP-76)
+  currency       String        @default("EUR")
+  volumeMl       Int? // prix aux 100 ml
+  weightGrams    Int // indispensable au tarif Sendcloud (lot 7)
+  status         ProductStatus @default(DRAFT)
+  availability   Availability  @default(COMING_SOON)
+
+  // Précommande : la date est annoncée AVANT le paiement (HEP-42).
+  preorderShipsAt DateTime?
+
+  stock         Int @default(0)
+  lowStockAlert Int @default(5)
+
+  usage       String?
+  inci        String?
+  precautions String?
+
+  seoTitle       String?
+  seoDescription String?
+  position       Int     @default(0)
+
+  benefits   ProductBenefit[]
+  images     ProductImage[]
+  movements  StockMovement[]
+  batches    Batch[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+  discounts  Discount[]
+
+  // Le coffret (BUNDLE) référence ses composants ; un composant sait à quels
+  // coffrets il appartient. Cf. HEP-40.
+  components BundleComponent[] @relation("BundleParent")
+  partOf     BundleComponent[] @relation("BundleChild")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, position])
+  @@index([category])
+}
+
+model BundleComponent {
+  bundle      Product @relation("BundleParent", fields: [bundleId], references: [id], onDelete: Cascade)
+  bundleId    String
+  component   Product @relation("BundleChild", fields: [componentId], references: [id], onDelete: Restrict)
+  componentId String
+  qty         Int     @default(1)
+
+  @@id([bundleId, componentId])
+  @@index([componentId])
+}
+
+model ProductBenefit {
+  id        String  @id @default(uuid())
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  label     String
+  position  Int     @default(0)
+
+  @@index([productId, position])
+}
+
+model ProductImage {
+  id        String    @id @default(uuid())
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  blobUrl   String // Vercel Blob — remplace le CDN Shopify (HEP-43)
+  alt       String
+  role      ImageRole @default(GALLERY)
+  position  Int       @default(0)
+
+  @@index([productId, position])
+}
+
+/// Historique des mouvements de stock : qui a modifié quoi, quand, pourquoi.
+model StockMovement {
+  id        String      @id @default(uuid())
+  product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  delta     Int
+  reason    StockReason
+  orderId   String?
+  actorId   String?
+  note      String?
+  createdAt DateTime    @default(now())
+
+  @@index([productId, createdAt])
+  @@index([orderId])
+}
+
+/// Numéro de lot — obligation cosmétique, indispensable en cas de rappel produit.
+model Batch {
+  id        String    @id @default(uuid())
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  code      String
+  expiresAt DateTime?
+  quantity  Int
+  createdAt DateTime  @default(now())
+
+  @@unique([productId, code])
+}
+
+// --- Panier ----------------------------------------------------------------
+
+model Cart {
+  id           String     @id @default(uuid())
+  token        String     @unique // cookie httpOnly, panier invité
+  userId       String? // Better Auth (lot 6) — relation câblée en HEP-62
+  items        CartItem[]
+  discountCode String?
+  expiresAt    DateTime // libère les réservations de stock
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model CartItem {
+  id            String    @id @default(uuid())
+  cart          Cart      @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  cartId        String
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId     String
+  qty           Int
+  reservedUntil DateTime?
+
+  @@unique([cartId, productId])
+  @@index([reservedUntil])
+}
+
+// --- Commandes -------------------------------------------------------------
+
+model Order {
+  id          String      @id @default(uuid())
+  number      String      @unique // HF-2026-0001
+  publicToken String      @unique // suivi sans compte, non devinable
+  userId      String? // Better Auth (lot 6)
+  email       String
+  status      OrderStatus @default(PENDING)
+
+  subtotalCents Int
+  discountCents Int    @default(0)
+  shippingCents Int
+  taxCents      Int
+  totalCents    Int
+  currency      String @default("EUR")
+  country       String @default("FR")
+  vatRate       Int    @default(2000) // points de base : 20,00 %
+
+  stripeSessionId       String? @unique
+  stripePaymentIntentId String? @unique
+  /// Générée côté serveur au rendu du panier, transmise à Stripe en
+  /// `Idempotency-Key`. Le conflit d'unicité est ce qui empêche le double
+  /// débit (cf. docs/BACKEND.md §4.2).
+  idempotencyKey        String? @unique
+
+  shippingAddress Json
+  billingAddress  Json
+  discountCode    String?
+  internalNote    String?
+
+  isPreorder      Boolean   @default(false)
+  preorderShipsAt DateTime?
+
+  // --- Consentement et attribution (lot 12, HEP-91) ------------------------
+  // Volontairement dans la MÊME migration que Order : la mesure serveur des
+  // conversions part du webhook Stripe. Ajoutés après coup, ils imposent de
+  // migrer une base de commandes remplie et font perdre définitivement les
+  // conversions des premières ventes.
+  consentMarketing  Boolean @default(false)
+  consentAnalytics  Boolean @default(false)
+  fbp               String?
+  fbc               String?
+  clientIpHash      String? // SHA-256 salé, jamais l'IP brute
+  clientUserAgent   String?
+  gaClientId        String?
+  purchaseEventId   String? @unique // déduplication pixel / CAPI
+  capiSentAt        DateTime?
+
+  items       OrderItem[]
+  events      OrderEvent[]
+  shipments   Shipment[]
+  invoice     Invoice?
+  returns     ReturnRequest[]
+  redemptions DiscountRedemption[]
+
+  createdAt DateTime  @default(now())
+  paidAt    DateTime?
+  shippedAt DateTime?
+
+  @@index([email, createdAt])
+  @@index([status, createdAt])
+  @@index([userId])
+}
+
+/// Snapshot obligatoire : un prix modifié demain ne doit pas altérer les
+/// commandes déjà passées.
+model OrderItem {
+  id                 String   @id @default(uuid())
+  order              Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId            String
+  product            Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productId          String?
+  nameSnapshot       String
+  skuSnapshot        String
+  priceCentsSnapshot Int
+  qty                Int
+  batchCode          String?
+
+  @@index([orderId])
+}
+
+model OrderEvent {
+  id        String   @id @default(uuid())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId   String
+  from      String?
+  to        String
+  actorId   String?
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+/// Compteur de facturation, une ligne par exercice.
+///
+/// Une SEQUENCE Postgres ne convient pas ici : `nextval()` est non
+/// transactionnel, donc un rollback consomme le numéro et laisse un trou —
+/// exactement ce que l'administration fiscale interdit. Ce compteur est
+/// incrémenté par `next_invoice_number()` dans la même transaction que la
+/// facture : si la transaction échoue, le numéro est rendu.
+model InvoiceCounter {
+  year       Int      @id
+  lastNumber Int      @default(0)
+  updatedAt  DateTime @updatedAt
+}
+
+/// Numérotation continue et sans trou (obligation française) : le numéro est
+/// tiré de `next_invoice_number()`, jamais calculé en JS.
+model Invoice {
+  id         String   @id @default(uuid())
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  orderId    String   @unique
+  number     String   @unique // FA-2026-000001
+  blobUrl    String?
+  totalCents Int
+  vatCents   Int
+  issuedAt   DateTime @default(now())
+}
+
+/// Idempotence du webhook Stripe : l'insertion précède le traitement.
+model StripeEvent {
+  id          String   @id // event.id Stripe
+  type        String
+  processedAt DateTime @default(now())
+}
+
+// --- Livraison -------------------------------------------------------------
+
+model Shipment {
+  id      String @id @default(uuid())
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String
+
+  carrier         String // colissimo | mondial_relay
+  method          ShippingMethod
+  pickupPointId   String?
+  pickupPointData Json?
+
+  sendcloudParcelId String?
+  trackingNumber    String?
+  trackingUrl       String?
+  labelUrl          String?
+  status            String?
+
+  shippedAt   DateTime?
+  deliveredAt DateTime?
+
+  @@index([orderId])
+  @@index([trackingNumber])
+}
+
+model ShippingRate {
+  id             String         @id @default(uuid())
+  carrier        String
+  method         ShippingMethod
+  maxWeightGrams Int
+  priceCents     Int
+  freeAboveCents Int?
+  active         Boolean        @default(true)
+
+  @@index([active, method, maxWeightGrams])
+}
+
+model ReturnRequest {
+  id          String       @id @default(uuid())
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId     String
+  reason      String
+  status      ReturnStatus @default(REQUESTED)
+  refundCents Int?
+  createdAt   DateTime     @default(now())
+
+  @@index([orderId])
+}
+
+// --- Réductions ------------------------------------------------------------
+
+model Discount {
+  id                    String               @id @default(uuid())
+  code                  String               @unique
+  type                  DiscountType
+  value                 Int // centimes (FIXED) ou points de base (PERCENT)
+  minOrderCents         Int?
+  product               Product?             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId             String? // null = tout le panier
+  startsAt              DateTime?
+  endsAt                DateTime?
+  maxUses               Int?
+  maxUsesPerCustomer    Int                  @default(1)
+  usedCount             Int                  @default(0)
+  stripePromotionCodeId String?
+  active                Boolean              @default(true)
+  redemptions           DiscountRedemption[]
+
+  @@index([active, endsAt])
+}
+
+model DiscountRedemption {
+  id         String   @id @default(uuid())
+  discount   Discount @relation(fields: [discountId], references: [id], onDelete: Cascade)
+  discountId String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId    String
+  email      String
+  createdAt  DateTime @default(now())
+
+  @@unique([discountId, orderId])
+  @@index([discountId, email])
+}
+
+// --- Clients, contenu, ops -------------------------------------------------
+// user / session / account / verification sont générés par Better Auth (HEP-62).
+// Les `userId` ci-dessus restent de simples String tant que ces tables
+// n'existent pas ; les relations seront câblées dans le lot 6.
+
+model Address {
+  id         String  @id @default(uuid())
+  userId     String
+  label      String?
+  firstName  String
+  lastName   String
+  line1      String
+  line2      String?
+  postalCode String
+  city       String
+  country    String  @default("FR")
+  phone      String?
+  isDefault  Boolean @default(false)
+
+  @@index([userId])
+}
+
+/// Preuve du consentement newsletter — obligation RGPD (HEP-67).
+model Subscriber {
+  id             String           @id @default(uuid())
+  email          String           @unique
+  status         SubscriberStatus @default(PENDING)
+  source         String? // 'band' | 'hero' | 'produit' | 'checkout'
+  consentAt      DateTime?
+  confirmedAt    DateTime?
+  confirmToken   String?          @unique
+  unsubToken     String           @unique
+  tokenExpiresAt DateTime?
+  ipHash         String? // SHA-256 salé, jamais l'IP brute
+  userAgent      String?
+  brevoSyncedAt  DateTime?
+  createdAt      DateTime         @default(now())
+
+  @@index([status])
+}
+
+model Message {
+  id        String        @id @default(uuid())
+  firstName String
+  lastName  String
+  email     String
+  subject   String
+  body      String
+  status    MessageStatus @default(NEW)
+  ipHash    String?
+  createdAt DateTime      @default(now())
+
+  @@index([status, createdAt])
+}
+
+model Review {
+  id               String       @id @default(uuid())
+  productId        String?
+  authorName       String
+  email            String
+  rating           Int
+  title            String?
+  body             String
+  status           ReviewStatus @default(PENDING)
+  verifiedPurchase Boolean      @default(false)
+  orderId          String?
+  adminNote        String?
+  createdAt        DateTime     @default(now())
+  publishedAt      DateTime?
+
+  @@index([productId, status])
+  @@index([status, createdAt])
+}
+
+/// Contenu éditorial en base : 'legal.cgv', 'histoire.intro', … (HEP-81)
+model ContentBlock {
+  key       String   @id
+  title     String?
+  bodyMd    String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+/// Une seule ligne. Alimente les factures et les mentions légales (HEP-80).
+model CompanySettings {
+  id           String   @id @default("singleton")
+  legalName    String
+  address      Json
+  siret        String
+  vatNumber    String
+  contactEmail String
+  contactPhone String?
+  vatRate      Int      @default(2000)
+  shipsTo      String[] @default(["FR"])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  entity    String
+  entityId  String
+  action    String
+  diff      Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+// --- Énumérations ----------------------------------------------------------
+
+enum Category {
+  CLEANSING // Nettoyage
+  TREATMENT // Soin ciblé
+  HYDRATION // Hydratation
+}
+
+enum ProductKind {
+  SIMPLE
+  BUNDLE // le coffret
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum Availability {
+  COMING_SOON
+  IN_STOCK
+  PREORDER
+  OUT_OF_STOCK
+  DISCONTINUED
+}
+
+enum ImageRole {
+  PRIMARY
+  HOVER
+  GALLERY
+}
+
+enum StockReason {
+  SALE
+  RESTOCK
+  CANCEL
+  REFUND
+  MANUAL
+  RESERVE
+  RELEASE
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PREPARING
+  SHIPPED
+  DELIVERED
+  CANCELED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum ShippingMethod {
+  HOME
+  PICKUP_POINT
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  RECEIVED
+  REFUNDED
+  REJECTED
+}
+
+enum DiscountType {
+  FIXED
+  PERCENT
+  FREE_SHIPPING
+}
+
+enum SubscriberStatus {
+  PENDING
+  CONFIRMED
+  UNSUBSCRIBED
+  BOUNCED
+}
+
+enum MessageStatus {
+  NEW
+  READ
+  ANSWERED
+  ARCHIVED
+  SPAM
+}
+
+enum ReviewStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
+}
