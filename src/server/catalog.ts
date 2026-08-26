@@ -44,6 +44,38 @@ export async function getProductBySlug(
   return findPublishedProductBySlug(db, slug);
 }
 
+/**
+ * Projection minimale pour la recherche du chrome.
+ *
+ * Séparée de `getProducts()` parce qu'elle est sérialisée dans le HTML de
+ * **chaque** page : descriptions, INCI et galeries n'ont rien à y faire.
+ */
+export async function getSearchProducts(): Promise<
+  { slug: string; name: string; priceCents: number }[]
+> {
+  "use cache";
+  cacheTag(catalogTags.all);
+  cacheLife("hours");
+  const products = await listPublishedProducts(db);
+  return products.map((p) => ({
+    slug: p.slug,
+    name: p.name,
+    priceCents: p.priceCents,
+  }));
+}
+
+/** Tous les slugs, brouillons et archives compris — pour l'administration. */
+export async function getAdminProductSlugs(): Promise<string[]> {
+  "use cache";
+  cacheTag(catalogTags.all);
+  cacheLife("hours");
+  const rows = await db.product.findMany({
+    orderBy: { position: "asc" },
+    select: { slug: true },
+  });
+  return rows.map((r) => r.slug);
+}
+
 export async function getProductSlugs(): Promise<string[]> {
   "use cache";
   cacheTag(catalogTags.all);

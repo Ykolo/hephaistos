@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { CoverImage } from "@/components/cover-image";
 import { Reveal } from "@/components/reveal";
 import { NewsletterBand } from "@/components/newsletter-band";
-import { formatPriceCompact } from "@/lib/format";
+import { formatPriceCompact, formatPricePer100ml } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import type { ProductView } from "@/lib/products";
 
@@ -77,6 +77,7 @@ export function ProductDetail({
   const [acc, setAcc] = useState<AccKey>("benef");
 
   const toggle = (k: AccKey) => setAcc((cur) => (cur === k ? "" : k));
+  const pricePer100ml = formatPricePer100ml(current.priceCents, current.volumeMl);
 
   return (
     <div>
@@ -129,6 +130,15 @@ export function ProductDetail({
               ★★★★★ <span className="text-muted-ink2">· Programme pilote</span>
             </span>
           </div>
+          {/*
+            Prix à l'unité de mesure — affichage obligatoire pour les produits
+            vendus au volume (code de la consommation). Calculé, jamais saisi.
+          */}
+          {pricePer100ml && (
+            <p className="m-0 -mt-[22px] mb-[26px] text-[12px] tracking-[.04em] text-muted-ink">
+              {pricePer100ml}
+            </p>
+          )}
           <p className="m-0 mb-8 max-w-[46ch] text-[15px] leading-[1.75] text-body">
             {current.description}
           </p>

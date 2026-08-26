@@ -1,6 +1,6 @@
 import type { Tx } from "../db";
 import type { ProductCategory, ProductView } from "@/lib/products";
-import type { Category, ImageRole } from "@/generated/prisma/client";
+import type { Category, ImageRole, Prisma } from "@/generated/prisma/client";
 
 /**
  * Lecture du catalogue public.
@@ -126,6 +126,171 @@ export async function findPublishedProductBySlug(
     select: productSelect,
   });
   return row ? toView(row) : null;
+}
+
+// --- Administration --------------------------------------------------------
+
+/** Ce que la liste d'administration affiche, brouillons et archives compris. */
+export type AdminProductRow = {
+  id: string;
+  slug: string;
+  sku: string;
+  name: string;
+  category: Category;
+  priceCents: number;
+  volumeMl: number | null;
+  weightGrams: number;
+  stock: number;
+  status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  availability: ProductView["availability"];
+  position: number;
+  updatedAt: Date;
+};
+
+/**
+ * Tous les produits, **sans** filtre de statut — l'admin doit voir ce que le
+ * site ne montre pas.
+ */
+export async function listAllProducts(db: Tx): Promise<AdminProductRow[]> {
+  return db.product.findMany({
+    orderBy: [{ position: "asc" }, { name: "asc" }],
+    select: {
+      id: true,
+      slug: true,
+      sku: true,
+      name: true,
+      category: true,
+      priceCents: true,
+      volumeMl: true,
+      weightGrams: true,
+      stock: true,
+      status: true,
+      availability: true,
+      position: true,
+      updatedAt: true,
+    },
+  });
+}
+
+/** Fiche complète pour le formulaire d'édition, quel que soit son statut. */
+export async function findProductForEdit(db: Tx, slug: string) {
+  return db.product.findUnique({ where: { slug } });
+}
+
+type ProductWriteData = {
+  slug: string;
+  sku: string;
+  name: string;
+  description: string;
+  tagline: string | null;
+  category: Category;
+  status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  availability: ProductView["availability"];
+  priceCents: number;
+  compareAtCents: number | null;
+  volumeMl: number;
+  weightGrams: number;
+  usage: string | null;
+  inci: string | null;
+  precautions: string | null;
+  seoTitle: string | null;
+  seoDescription: string | null;
+};
+
+/**
+ * Crée ou met à jour une fiche, et journalise le changement.
+ *
+ * L'`AuditLog` enregistre le **diff**, pas l'état final : savoir qu'un prix
+ * vaut 20 € n'aide pas, savoir qu'il est passé de 15 à 20 le 12 mars si.
+ * C'est ce qu'on cherche quand un client conteste un prix affiché.
+ */
+export async function upsertProduct(
+  db: Tx,
+  data: ProductWriteData,
+  actorId: string,
+): Promise<{ id: string; created: boolean }> {
+  const existing = await db.product.findUnique({
+    where: { slug: data.slug },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    // `position` en fin de liste : un nouveau produit ne doit pas s'insérer
+    // devant les autres sans que personne ne l'ait demandé.
+    const last = await db.product.aggregate({ _max: { position: true } });
+    const product = await db.product.create({
+      data: { ...data, position: (last._max.position ?? -1) + 1 },
+      select: { id: true },
+    });
+
+    await db.auditLog.create({
+      data: {
+        actorId,
+        entity: "Product",
+        entityId: product.id,
+        action: "create",
+        diff: data as unknown as Prisma.InputJsonObject,
+      },
+    });
+
+    return { id: product.id, created: true };
+  }
+
+  const before = await db.product.findUniqueOrThrow({
+    where: { id: existing.id },
+  });
+
+  await db.product.update({ where: { id: existing.id }, data });
+
+  const changes: Record<string, Prisma.InputJsonValue> = {};
+  for (const [key, value] of Object.entries(data)) {
+    const previous = (before as Record<string, unknown>)[key];
+    if (previous !== value) {
+      changes[key] = {
+        avant: previous as Prisma.InputJsonValue,
+        apres: value as Prisma.InputJsonValue,
+      };
+    }
+  }
+
+  // Rien n'a bougé : ne pas polluer le journal d'une entrée vide, sinon les
+  // vraies modifications se noient dedans.
+  if (Object.keys(changes).length > 0) {
+    await db.auditLog.create({
+      data: {
+        actorId,
+        entity: "Product",
+        entityId: existing.id,
+        action: "update",
+        diff: changes as Prisma.InputJsonObject,
+      },
+    });
+  }
+
+  return { id: existing.id, created: false };
+}
+
+/** Applique un nouvel ordre d'affichage, dans une seule transaction. */
+export async function reorderProducts(
+  db: Tx,
+  slugs: string[],
+  actorId: string,
+): Promise<void> {
+  await Promise.all(
+    slugs.map((slug, position) =>
+      db.product.update({ where: { slug }, data: { position } }),
+    ),
+  );
+
+  await db.auditLog.create({
+    data: {
+      actorId,
+      entity: "Product",
+      entityId: "*",
+      action: "reorder",
+      diff: { ordre: slugs },
+    },
+  });
 }
 
 /** Slugs publiés — utilisé par `generateStaticParams` et le sitemap (HEP-97). */

@@ -3,7 +3,8 @@ import { Newsreader, Archivo } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { SiteChrome } from "@/components/site-chrome";
-import { getProducts } from "@/server/catalog";
+import { Suspense } from "react";
+import { SearchOverlayData } from "@/components/search-overlay-data";
 
 const newsreader = Newsreader({
   variable: "--font-newsreader",
@@ -26,18 +27,11 @@ export const metadata: Metadata = {
     "Soins visage pour homme. Des rituels simples, conçus pour les hommes qui se construisent. Fabriqué en France, formules clean.",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const products = await getProducts();
-  const searchProducts = products.map((p) => ({
-    slug: p.slug,
-    name: p.name,
-    priceCents: p.priceCents,
-  }));
-
   return (
     <html
       lang="fr"
@@ -45,7 +39,15 @@ export default async function RootLayout({
     >
       <body className="min-h-full bg-paper text-ink">
         <Providers>
-          <SiteChrome searchProducts={searchProducts}>{children}</SiteChrome>
+          <SiteChrome
+            searchSlot={
+              <Suspense fallback={null}>
+                <SearchOverlayData />
+              </Suspense>
+            }
+          >
+            {children}
+          </SiteChrome>
         </Providers>
       </body>
     </html>
