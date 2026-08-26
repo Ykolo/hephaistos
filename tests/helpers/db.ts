@@ -54,7 +54,15 @@ export async function createTestProduct(overrides: {
   });
 }
 
-/** Supprime les produits créés par les tests (cascade sur les mouvements). */
+/**
+ * Supprime les produits créés par les tests (cascade sur les mouvements).
+ *
+ * `AuditLog` est purgé séparément : il n'a **volontairement** pas de clé
+ * étrangère vers `Product`, pour que le journal survive à la suppression de ce
+ * qu'il décrit — c'est tout l'intérêt d'un journal d'audit. Sans ce nettoyage
+ * explicite, les entrées s'accumuleraient d'un test à l'autre.
+ */
 export async function cleanupTestProducts() {
   await testDb.product.deleteMany({ where: { slug: { startsWith: "test-" } } });
+  await testDb.auditLog.deleteMany({ where: { actorId: { startsWith: "admin-test" } } });
 }

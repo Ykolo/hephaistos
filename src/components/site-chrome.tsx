@@ -8,17 +8,21 @@ import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { MobileMenu } from "@/components/mobile-menu";
 import { CartDrawer } from "@/components/cart-drawer";
-import { SearchOverlay, type SearchItem } from "@/components/search-overlay";
+
 import { CustomCursor } from "@/components/custom-cursor";
 import { useUIStore } from "@/store/ui-store";
 
 export function SiteChrome({
   children,
-  searchProducts,
+  searchSlot,
 }: {
   children: React.ReactNode;
-  /** Résolu côté serveur dans le layout — le chrome ne fait que le relayer. */
-  searchProducts: SearchItem[];
+  /**
+   * Recherche déjà rendue côté serveur, sous <Suspense>. Le chrome ne fait
+   * que la placer : lui passer les données le rendrait bloquant pour toutes
+   * les routes dynamiques.
+   */
+  searchSlot: React.ReactNode;
 }) {
   const pathname = usePathname();
   const closeAllOverlays = useUIStore((s) => s.closeAllOverlays);
@@ -46,7 +50,7 @@ export function SiteChrome({
 
       <MobileMenu />
       <CartDrawer />
-      <SearchOverlay products={searchProducts} />
+      {searchSlot}
       <CustomCursor />
     </div>
   );
