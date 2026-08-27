@@ -1,11 +1,19 @@
 "use server";
 
-import { productFormSchema, reorderSchema } from "@/lib/validation/product";
+import {
+  bundleCompositionSchema,
+  productFormSchema,
+  reorderSchema,
+} from "@/lib/validation/product";
 import { formAction, action } from "../action";
 import { db } from "../db";
 import { invalidateCatalog } from "../catalog";
 import { guardAdminAction, PROVISIONAL_ACTOR_ID } from "../admin-guard";
-import { reorderProducts, upsertProduct } from "../services/catalog";
+import {
+  reorderProducts,
+  setBundleComposition,
+  upsertProduct,
+} from "../services/catalog";
 import { ActionError } from "../errors";
 
 /**
@@ -51,6 +59,27 @@ export const saveProduct = formAction(
     return { id: result.id, slug: input.slug, created: result.created };
   },
   { name: "admin.product.save" },
+);
+
+/**
+ * Composition d'un coffret (HEP-40).
+ *
+ * Le stock du coffret n'est jamais saisi ici : il découle des composants.
+ * L'action ne fait que déclarer « quel produit, en quelle quantité ».
+ */
+export const saveBundleComposition = action(
+  bundleCompositionSchema,
+  async ({ bundleSlug, components }) => {
+    guardAdminAction();
+    await setBundleComposition(db, bundleSlug, components, PROVISIONAL_ACTOR_ID);
+
+    // La disponibilité du coffret dépend de ses composants : changer la
+    // composition change ce que le site doit afficher.
+    invalidateCatalog(bundleSlug);
+
+    return { count: components.length };
+  },
+  { name: "admin.bundle.composition" },
 );
 
 export const reorder = action(

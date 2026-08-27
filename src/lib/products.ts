@@ -23,6 +23,18 @@ export interface ProductView {
   /** Identifiant d'URL — `nettoyant`, `serum`, `creme`. */
   slug: string;
   name: string;
+
+  /** `BUNDLE` = coffret : il n'a pas de stock propre, il consomme celui de ses composants. */
+  kind: "SIMPLE" | "BUNDLE";
+
+  /**
+   * Unités réellement vendables. Pour un coffret, c'est un **calcul** sur les
+   * composants, pas une valeur stockée. Exposé au front parce que la fiche en
+   * a besoin (sélecteur de quantité, mention « derniers exemplaires ») ; le
+   * stock brut des composants, lui, ne sort pas du serveur.
+   */
+  availableUnits: number;
+
   category: ProductCategory;
   tagline: string | null;
   description: string;

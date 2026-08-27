@@ -12,6 +12,7 @@ type Values = {
   tagline: string;
   description: string;
   category: string;
+  kind: string;
   status: string;
   availability: string;
   priceEuros: string;
@@ -178,7 +179,7 @@ export function ProductForm({ initial }: { initial: Values }) {
         <Err id="description-error" message={fields.description} />
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-3">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <label className={label} htmlFor="category">
             Catégorie
@@ -194,6 +195,27 @@ export function ProductForm({ initial }: { initial: Values }) {
             <option value="TREATMENT">Soin ciblé</option>
             <option value="HYDRATION">Hydratation</option>
           </select>
+        </div>
+
+        <div>
+          <label className={label} htmlFor="kind">
+            Type
+          </label>
+          <select
+            id="kind"
+            name="kind"
+            className={field}
+            value={values.kind}
+            onChange={(e) => set("kind")(e.target.value)}
+          >
+            <option value="SIMPLE">Produit simple</option>
+            <option value="BUNDLE">Coffret</option>
+          </select>
+          {values.kind === "BUNDLE" && (
+            <span className="mt-1 block text-[11.5px] text-muted-ink">
+              Stock calculé sur les composants — voir la composition plus bas.
+            </span>
+          )}
         </div>
 
         <div>

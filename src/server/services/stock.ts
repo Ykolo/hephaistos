@@ -251,6 +251,155 @@ export async function stockFromMovements(
   return result._sum.delta ?? 0;
 }
 
+// --- Coffrets (HEP-40) -----------------------------------------------------
+
+/** Une ligne de stock réellement mouvementée : toujours un produit simple. */
+export type StockLine = { productId: string; qty: number };
+
+/**
+ * Traduit une vente en lignes de stock réelles.
+ *
+ * Un coffret n'a pas de stock propre : il consomme celui de ses composants.
+ * Le tri par `componentId` n'est pas cosmétique — c'est lui qui évite les
+ * interblocages. Deux commandes simultanées, l'une « coffret », l'autre
+ * « sérum + nettoyant », prennent leurs verrous de ligne dans le même ordre ;
+ * sans ce tri, Postgres en tuerait une des deux.
+ */
+export async function expandToStockLines(
+  tx: Tx,
+  productId: string,
+  qty: number,
+): Promise<StockLine[]> {
+  const product = await tx.product.findUnique({
+    where: { id: productId },
+    select: {
+      kind: true,
+      name: true,
+      components: {
+        select: { componentId: true, qty: true, component: { select: { kind: true } } },
+      },
+    },
+  });
+
+  if (!product) {
+    throw new ActionError("NOT_FOUND", "Ce produit est introuvable.");
+  }
+
+  if (product.kind === "SIMPLE") return [{ productId, qty }];
+
+  if (product.components.length === 0) {
+    // Un coffret vide se vendrait sans jamais rien décrémenter : stock
+    // infini et préparation impossible. Mieux vaut refuser la vente.
+    throw new ActionError(
+      "PRODUCT_UNAVAILABLE",
+      `La composition du coffret « ${product.name} » n'est pas renseignée.`,
+    );
+  }
+
+  for (const c of product.components) {
+    if (c.component.kind === "BUNDLE") {
+      // Interdit à la saisie, revérifié ici : un coffret imbriqué rendrait le
+      // calcul de stock récursif et le décrément impossible à ordonner.
+      throw new ActionError(
+        "INTERNAL",
+        "Un coffret ne peut pas contenir un autre coffret.",
+      );
+    }
+  }
+
+  return [...product.components]
+    .sort((a, b) => a.componentId.localeCompare(b.componentId))
+    .map((c) => ({ productId: c.componentId, qty: qty * c.qty }));
+}
+
+/**
+ * Vente d'un produit, coffret compris.
+ *
+ * Point d'entrée unique du tunnel de commande. Pour un coffret, écrit un
+ * mouvement `SALE` **par composant** et aucun sur le coffret lui-même : le
+ * coffret n'ayant pas de stock, un mouvement à son nom fausserait la somme.
+ *
+ * Les décréments sont séquentiels, dans l'ordre trié — un `Promise.all`
+ * réintroduirait l'indéterminisme que ce tri sert à éliminer.
+ */
+export async function sellProduct(
+  tx: Tx,
+  change: StockChange,
+): Promise<{ lines: (StockResult & StockLine)[]; crossedLowStockThreshold: boolean }> {
+  const lines = await expandToStockLines(tx, change.productId, change.qty);
+
+  const results: (StockResult & StockLine)[] = [];
+  for (const line of lines) {
+    const r = await decrementStock(tx, {
+      ...change,
+      productId: line.productId,
+      qty: line.qty,
+    });
+    results.push({ ...r, ...line });
+  }
+
+  return {
+    lines: results,
+    crossedLowStockThreshold: results.some((r) => r.crossedLowStockThreshold),
+  };
+}
+
+/**
+ * Remise en stock — annulation, remboursement, retour.
+ *
+ * Symétrique de `sellProduct` : rembourser un coffret rend bien une unité de
+ * chaque composant, tracée individuellement.
+ */
+export async function restockProduct(
+  tx: Tx,
+  change: StockChange,
+): Promise<(StockResult & StockLine)[]> {
+  const lines = await expandToStockLines(tx, change.productId, change.qty);
+
+  const results: (StockResult & StockLine)[] = [];
+  for (const line of lines) {
+    const r = await incrementStock(tx, {
+      ...change,
+      productId: line.productId,
+      qty: line.qty,
+    });
+    results.push({ ...r, ...line });
+  }
+  return results;
+}
+
+/**
+ * Stock vendable d'un coffret — **calculé, jamais saisi**.
+ *
+ * `min(stock du composant / quantité requise)`. Un coffret dont un seul
+ * composant manque n'est pas vendable, quel que soit l'état des deux autres :
+ * c'est ce que le minimum exprime.
+ *
+ * Renvoie le stock propre du produit s'il est simple.
+ */
+export async function availableUnits(tx: Tx, productId: string): Promise<number> {
+  const product = await tx.product.findUnique({
+    where: { id: productId },
+    select: {
+      kind: true,
+      stock: true,
+      components: {
+        select: { qty: true, component: { select: { stock: true } } },
+      },
+    },
+  });
+
+  if (!product) throw new ActionError("NOT_FOUND", "Ce produit est introuvable.");
+  if (product.kind === "SIMPLE") return product.stock;
+  if (product.components.length === 0) return 0;
+
+  return Math.min(
+    ...product.components.map((c) =>
+      Math.floor(c.component.stock / Math.max(c.qty, 1)),
+    ),
+  );
+}
+
 /** Produits dont le stock est retombé au niveau d'alerte (tableau de bord, HEP-79). */
 export async function listLowStockProducts(tx: Tx) {
   return tx.$queryRaw<
