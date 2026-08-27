@@ -8,6 +8,16 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   images: {
     remotePatterns: [
+      // Vercel Blob — destination des images produit (HEP-43). Le motif est
+      // volontairement générique : changer de store ne doit pas casser les
+      // images.
+      {
+        protocol: "https",
+        hostname: "*.public.blob.vercel-storage.com",
+      },
+      // ⚠️ CDN Shopify — à RETIRER une fois `bun run images:migrate` passé et
+      // vérifié. Shopify est abandonné : tant que cette ligne est là, le site
+      // dépend d'une plateforme qui peut couper ces URL sans préavis.
       {
         protocol: "https",
         hostname: "hephaistosparis.com",

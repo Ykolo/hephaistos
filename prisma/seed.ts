@@ -19,6 +19,9 @@ import { PrismaPg } from "@prisma/adapter-pg";
  *   - `weightGrams` : poids emballé, dont dépend tout le tarif Sendcloud (lot 7)
  */
 
+// ⚠️ URL Shopify — uniquement pour l'amorçage d'une base vierge. Enchaîner
+// avec `bun run images:migrate` pour les basculer sur Vercel Blob (HEP-43) :
+// Shopify est abandonné et peut couper ces liens sans préavis.
 const CDN = "https://hephaistosparis.com/cdn/shop/files";
 
 type SeedProduct = {
@@ -156,14 +159,24 @@ async function main() {
       })),
     });
 
-    const images: { blobUrl: string; role: ImageRole; position: number }[] = [
-      { blobUrl: p.image, role: "PRIMARY", position: 0 },
-      { blobUrl: p.imageHover, role: "HOVER", position: 1 },
-    ];
-    await db.productImage.deleteMany({ where: { productId: product.id } });
-    await db.productImage.createMany({
-      data: images.map((img) => ({ ...img, productId: product.id, alt: p.name })),
+    // Les images ne sont posées QUE si le produit n'en a aucune.
+    //
+    // Un remplacement en bloc écraserait les URL migrées vers Vercel Blob
+    // (HEP-43) et réintroduirait des liens Shopify — sur une plateforme
+    // abandonnée dont les URL peuvent disparaître. Rejouer le seed ne doit
+    // jamais faire reculer les images.
+    const existingImages = await db.productImage.count({
+      where: { productId: product.id },
     });
+    if (existingImages === 0) {
+      const images: { blobUrl: string; role: ImageRole; position: number }[] = [
+        { blobUrl: p.image, role: "PRIMARY", position: 0 },
+        { blobUrl: p.imageHover, role: "HOVER", position: 1 },
+      ];
+      await db.productImage.createMany({
+        data: images.map((img) => ({ ...img, productId: product.id, alt: p.name })),
+      });
+    }
 
     console.log(`✓ ${p.name} — ${(p.priceCents / 100).toFixed(2)} € (${p.sku})`);
   }

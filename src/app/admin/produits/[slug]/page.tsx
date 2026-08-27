@@ -9,6 +9,9 @@ import {
 } from "@/server/services/catalog";
 import { ProductForm } from "@/components/admin/product-form";
 import { BundleComposition } from "@/components/admin/bundle-composition";
+import { ProductImages } from "@/components/admin/product-images";
+import { listImages } from "@/server/services/images";
+import { storageDriver } from "@/server/storage";
 import { getAdminProductSlugs } from "@/server/catalog";
 
 /**
@@ -70,6 +73,7 @@ async function EditForm({ params }: { params: Promise<{ slug: string }> }) {
 
   // Chargé seulement pour un coffret : inutile de lister les candidats pour
   // un produit simple.
+  const images = await listImages(db, slug);
   const isBundle = product.kind === "BUNDLE";
   const [composition, candidates] = isBundle
     ? await Promise.all([
@@ -115,6 +119,12 @@ async function EditForm({ params }: { params: Promise<{ slug: string }> }) {
           seoTitle: product.seoTitle ?? "",
           seoDescription: product.seoDescription ?? "",
         }}
+      />
+
+      <ProductImages
+        productSlug={product.slug}
+        images={images}
+        driver={storageDriver()}
       />
 
       {isBundle && (

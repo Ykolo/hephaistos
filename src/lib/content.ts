@@ -5,18 +5,16 @@
  * n'ont donc rien à faire dans `products.ts`, désormais réduit aux types.
  *
  * Ce fichier est une étape, pas une destination : les textes légaux passent en
- * base avec HEP-81 (`ContentBlock`), et les visuels éditoriaux quittent le CDN
- * Shopify avec HEP-43 (Vercel Blob).
+ * base avec HEP-81 (`ContentBlock`). Les visuels éditoriaux ont quitté le CDN
+ * Shopify pour Vercel Blob (HEP-43) — voir `scripts/migrate-hero-images.ts`.
  */
-
-const CDN = "https://hephaistosparis.com/cdn/shop/files";
 
 /** Visuels éditoriaux réutilisés d'une page à l'autre. */
 export const heroImages = {
-  home: `${CDN}/hf_20260608_132538_2c01770c-1230-4bca-8da0-93cf2cb6091f.png?v=1780925206&width=1600`,
-  featured: `${CDN}/hf_20260618_125354_856d9c75-68cf-4560-9867-c25c0e38c6d5.png?v=1781788175&width=1400`,
-  editorial: `${CDN}/hf_20260608_134149_2c6f91de-75c3-4928-8c6c-07263e85c9de.jpg?v=1780926192&width=1400`,
-  histoire: `${CDN}/hf_20260608_134149_2c6f91de-75c3-4928-8c6c-07263e85c9de.jpg?v=1780926192&width=1600`,
+  home: "https://j0rkrhdbaya8wld3.public.blob.vercel-storage.com/produits/editorial-home/8dffff70-2e79-4a3d-bedb-1f3115c940d4-1024.webp",
+  featured: "https://j0rkrhdbaya8wld3.public.blob.vercel-storage.com/produits/editorial-featured/df02fb23-c54a-4c2f-94dd-a1ba2df66fdf-1024.webp",
+  editorial: "https://j0rkrhdbaya8wld3.public.blob.vercel-storage.com/produits/editorial-editorial/a7fa564f-fbfb-4c88-a763-0c170ec66f97-1024.webp",
+  histoire: "https://j0rkrhdbaya8wld3.public.blob.vercel-storage.com/produits/editorial-histoire/1a0df5af-6f62-4cf7-81b1-17f7725c87b1-1024.webp",
 };
 
 export type LegalKey = "mentions" | "cgv" | "confid" | "cookies" | "retour";
