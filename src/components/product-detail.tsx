@@ -7,6 +7,7 @@ import { CoverImage } from "@/components/cover-image";
 import { Reveal } from "@/components/reveal";
 import { NewsletterBand } from "@/components/newsletter-band";
 import { formatPriceCompact, formatPricePer100ml } from "@/lib/format";
+import { preorderNotice } from "@/lib/dates";
 import { routes } from "@/lib/routes";
 import type { ProductView } from "@/lib/products";
 
@@ -169,10 +170,24 @@ export function ProductDetail({
               Me prévenir au lancement
             </Link>
           </div>
-          <p className="m-0 mb-[30px] text-[12px] tracking-[.06em] text-gold">
-            ● Épuisé — disponible au lancement. Rejoins la liste pour un accès
-            prioritaire.
-          </p>
+          {/*
+            Précommande : la date d'expédition s'affiche AVANT le paiement.
+            L'encaissement étant immédiat, c'est l'engagement pris envers le
+            client — la reléguer à l'après-achat serait une faute (HEP-42).
+          */}
+          {current.availability === "PREORDER" ? (
+            <p className="m-0 mb-[30px] text-[12.5px] leading-[1.6] tracking-[.04em] text-gold">
+              ● {preorderNotice(current.preorderShipsAt)}
+              <span className="mt-1 block text-[11.5px] text-muted-ink">
+                Paiement encaissé à la commande.
+              </span>
+            </p>
+          ) : (
+            <p className="m-0 mb-[30px] text-[12px] tracking-[.06em] text-gold">
+              ● Épuisé — disponible au lancement. Rejoins la liste pour un accès
+              prioritaire.
+            </p>
+          )}
 
           {/* reassurance */}
           <div className="mb-2 flex flex-wrap gap-[22px] border-y border-line py-[22px]">

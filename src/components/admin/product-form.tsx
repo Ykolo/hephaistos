@@ -19,6 +19,7 @@ type Values = {
   compareAtEuros: string;
   volumeMl: string;
   weightGrams: string;
+  preorderShipsAt: string;
   usage: string;
   inci: string;
   precautions: string;
@@ -323,6 +324,30 @@ export function ProductForm({ initial }: { initial: Values }) {
           <Err id="weight-error" message={fields.weightGrams} />
         </div>
       </div>
+
+      {values.availability === "PREORDER" && (
+        <div className="border-l-2 border-gold pl-3">
+          <label className={label} htmlFor="preorderShipsAt">
+            Date d&apos;expédition annoncée
+          </label>
+          <input
+            id="preorderShipsAt"
+            name="preorderShipsAt"
+            type="date"
+            className={`${field} max-w-[240px]`}
+            value={values.preorderShipsAt}
+            onChange={(e) => set("preorderShipsAt")(e.target.value)}
+            aria-invalid={Boolean(fields.preorderShipsAt)}
+          />
+          <span className="mt-1 block max-w-[60ch] text-[11.5px] leading-[1.6] text-muted-ink">
+            Obligatoire. L&apos;encaissement est immédiat : cette date engage la
+            marque. Au-delà de 30 jours de retard sans nouvelle date acceptée,
+            le client peut exiger le remboursement. Tout décalage doit être
+            annoncé aux clients concernés.
+          </span>
+          <Err id="preorder-error" message={fields.preorderShipsAt} />
+        </div>
+      )}
 
       <p className="m-0 border-l-2 border-line-strong pl-3 text-[13px] text-body">
         Prix à l&apos;unité de mesure :{" "}

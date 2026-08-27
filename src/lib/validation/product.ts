@@ -168,6 +168,19 @@ export const productFormSchema = z
      */
     weightGrams: positiveInt("Le poids"),
 
+    /**
+     * Date d'expédition annoncée, au format `AAAA-MM-JJ`.
+     *
+     * Obligatoire dès que le produit est en précommande — voir le `refine`
+     * plus bas. L'encaissement étant immédiat, annoncer une date crée
+     * l'obligation de livrer : la vente sans date n'est pas une option.
+     */
+    preorderShipsAt: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => (v ? v : null)),
+
     usage: optionalText(2000),
     inci: optionalText(4000),
     precautions: optionalText(2000),
@@ -179,6 +192,46 @@ export const productFormSchema = z
     {
       error: "Le prix barré doit être supérieur au prix de vente.",
       path: ["compareAtCents"],
+    },
+  )
+  /**
+   * Pas de précommande sans date annoncée.
+   *
+   * L'encaissement est immédiat (décision actée) : le paiement crée donc
+   * l'obligation de livrer à la date promise. Mettre un produit en
+   * précommande sans date reviendrait à encaisser sans rien s'engager à
+   * tenir — c'est ce que ce refus empêche.
+   */
+  .refine((v) => v.availability !== "PREORDER" || v.preorderShipsAt !== null, {
+    error:
+      "Une date d'expédition est obligatoire pour un produit en précommande.",
+    path: ["preorderShipsAt"],
+  })
+  .refine(
+    (v) => {
+      if (!v.preorderShipsAt) return true;
+      const d = new Date(v.preorderShipsAt);
+      return !Number.isNaN(d.getTime());
+    },
+    { error: "Cette date n'est pas valide.", path: ["preorderShipsAt"] },
+  )
+  /**
+   * Une date déjà passée ne se corrige pas toute seule : elle produirait un
+   * « expédié le 3 janvier » affiché en mars, et déclencherait le droit au
+   * remboursement sans que personne ne s'en aperçoive.
+   */
+  .refine(
+    (v) => {
+      if (v.availability !== "PREORDER" || !v.preorderShipsAt) return true;
+      const d = new Date(v.preorderShipsAt);
+      if (Number.isNaN(d.getTime())) return true; // déjà signalé plus haut
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return d >= today;
+    },
+    {
+      error: "La date d'expédition annoncée ne peut pas être dans le passé.",
+      path: ["preorderShipsAt"],
     },
   );
 

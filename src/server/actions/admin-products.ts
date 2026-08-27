@@ -49,8 +49,19 @@ export const saveProduct = formAction(
       }
     }
 
-    const { id, ...data } = input;
+    const { id, preorderShipsAt, ...rest } = input;
     void id;
+
+    const data = {
+      ...rest,
+      // Saisie en `AAAA-MM-JJ`, stockée en date. Vidée si le produit n'est
+      // plus en précommande : une date résiduelle réapparaîtrait au prochain
+      // passage en PREORDER et annoncerait une promesse périmée.
+      preorderShipsAt:
+        rest.availability === "PREORDER" && preorderShipsAt
+          ? new Date(preorderShipsAt)
+          : null,
+    };
 
     const result = await upsertProduct(db, data, PROVISIONAL_ACTOR_ID);
 
