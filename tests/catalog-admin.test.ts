@@ -115,6 +115,7 @@ describe("écriture du catalogue", () => {
     compareAtCents: null,
     volumeMl: 30,
     weightGrams: 80,
+    preorderShipsAt: null,
     usage: null,
     inci: null,
     precautions: null,

@@ -230,6 +230,7 @@ type ProductWriteData = {
   compareAtCents: number | null;
   volumeMl: number;
   weightGrams: number;
+  preorderShipsAt: Date | null;
   usage: string | null;
   inci: string | null;
   precautions: string | null;
@@ -378,6 +379,97 @@ export async function setBundleComposition(
       diff: { composition: components } as unknown as Prisma.InputJsonObject,
     },
   });
+}
+
+// --- Précommandes (HEP-42) -------------------------------------------------
+
+/**
+ * Clients à prévenir d'un décalage de date de précommande.
+ *
+ * Ce n'est pas du confort : l'encaissement étant immédiat, la date annoncée
+ * engage la marque. Au-delà de 30 jours de retard sans nouvelle date acceptée,
+ * le client peut exiger le remboursement (code de la consommation). Ne pas
+ * prévenir, c'est laisser courir ce délai à son insu.
+ *
+ * Renvoie une adresse par commande en attente, dédoublonnée.
+ */
+export async function listPreorderCustomers(
+  db: Tx,
+  productId: string,
+): Promise<{ email: string; orderNumber: string; orderId: string }[]> {
+  const orders = await db.order.findMany({
+    where: {
+      isPreorder: true,
+      // Une commande déjà expédiée, livrée ou annulée n'attend plus rien.
+      status: { in: ["PAID", "PREPARING"] },
+      items: { some: { productId } },
+    },
+    select: { id: true, email: true, number: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const seen = new Set<string>();
+  return orders
+    .filter((o) => {
+      const key = o.email.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((o) => ({ email: o.email, orderNumber: o.number, orderId: o.id }));
+}
+
+/**
+ * Change la date d'expédition annoncée et renvoie qui doit être prévenu.
+ *
+ * Le décalage est journalisé même si personne n'attend encore : c'est la
+ * trace qui permettra plus tard de prouver quand la promesse a changé.
+ */
+export async function shiftPreorderDate(
+  db: Tx,
+  slug: string,
+  newDate: Date,
+  actorId: string,
+): Promise<{
+  previous: Date | null;
+  next: Date;
+  toNotify: { email: string; orderNumber: string; orderId: string }[];
+}> {
+  const product = await db.product.findUnique({
+    where: { slug },
+    select: { id: true, preorderShipsAt: true, availability: true },
+  });
+  if (!product) throw new ActionError("NOT_FOUND", "Ce produit est introuvable.");
+  if (product.availability !== "PREORDER") {
+    throw new ActionError(
+      "VALIDATION",
+      "Ce produit n'est pas en précommande.",
+    );
+  }
+
+  const previous = product.preorderShipsAt;
+  await db.product.update({
+    where: { id: product.id },
+    data: { preorderShipsAt: newDate },
+  });
+
+  const toNotify = await listPreorderCustomers(db, product.id);
+
+  await db.auditLog.create({
+    data: {
+      actorId,
+      entity: "Product",
+      entityId: product.id,
+      action: "preorder.shift",
+      diff: {
+        avant: previous?.toISOString() ?? null,
+        apres: newDate.toISOString(),
+        clientsAPrevenir: toNotify.length,
+      } as unknown as Prisma.InputJsonObject,
+    },
+  });
+
+  return { previous, next: newDate, toNotify };
 }
 
 /** Composition actuelle d'un coffret, pour l'écran d'administration. */

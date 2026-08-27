@@ -106,6 +106,9 @@ async function EditForm({ params }: { params: Promise<{ slug: string }> }) {
           compareAtEuros: toEuros(product.compareAtCents),
           volumeMl: product.volumeMl?.toString() ?? "",
           weightGrams: product.weightGrams.toString(),
+          // `<input type="date">` attend AAAA-MM-JJ.
+          preorderShipsAt:
+            product.preorderShipsAt?.toISOString().slice(0, 10) ?? "",
           usage: product.usage ?? "",
           inci: product.inci ?? "",
           precautions: product.precautions ?? "",
