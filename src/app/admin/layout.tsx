@@ -28,6 +28,12 @@ export default function AdminLayout({
           <Link href="/admin/produits" className="underline underline-offset-4">
             Produits
           </Link>
+          <Link href="/admin/lots" className="underline underline-offset-4">
+            Lots
+          </Link>
+          <Link href="/admin/rappel" className="underline underline-offset-4">
+            Rappel produit
+          </Link>
         </nav>
       </header>
 
