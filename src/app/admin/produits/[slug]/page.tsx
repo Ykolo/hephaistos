@@ -3,8 +3,12 @@ import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/server/db";
-import { findProductForEdit } from "@/server/services/catalog";
+import {
+  findProductForEdit,
+  getBundleComposition,
+} from "@/server/services/catalog";
 import { ProductForm } from "@/components/admin/product-form";
+import { BundleComposition } from "@/components/admin/bundle-composition";
 import { getAdminProductSlugs } from "@/server/catalog";
 
 /**
@@ -64,6 +68,22 @@ async function EditForm({ params }: { params: Promise<{ slug: string }> }) {
   const product = await findProductForEdit(db, slug);
   if (!product) notFound();
 
+  // Chargé seulement pour un coffret : inutile de lister les candidats pour
+  // un produit simple.
+  const isBundle = product.kind === "BUNDLE";
+  const [composition, candidates] = isBundle
+    ? await Promise.all([
+        getBundleComposition(db, slug),
+        // Uniquement des produits simples : les coffrets imbriqués sont
+        // refusés côté serveur, autant ne pas les proposer.
+        db.product.findMany({
+          where: { kind: "SIMPLE" },
+          orderBy: { name: "asc" },
+          select: { slug: true, name: true, sku: true, stock: true },
+        }),
+      ])
+    : [[], []];
+
   return (
     <>
       <h1 className="m-0 mb-6 font-serif text-[1.8rem] font-normal">
@@ -79,6 +99,7 @@ async function EditForm({ params }: { params: Promise<{ slug: string }> }) {
           tagline: product.tagline ?? "",
           description: product.description,
           category: product.category,
+          kind: product.kind,
           status: product.status,
           availability: product.availability,
           priceEuros: toEuros(product.priceCents),
@@ -92,6 +113,14 @@ async function EditForm({ params }: { params: Promise<{ slug: string }> }) {
           seoDescription: product.seoDescription ?? "",
         }}
       />
+
+      {isBundle && (
+        <BundleComposition
+          bundleSlug={product.slug}
+          candidates={candidates}
+          initial={composition.map((c) => ({ slug: c.component.slug, qty: c.qty }))}
+        />
+      )}
     </>
   );
 }

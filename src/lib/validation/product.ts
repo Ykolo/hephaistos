@@ -137,6 +137,13 @@ export const productFormSchema = z
     category: z.enum(["CLEANSING", "TREATMENT", "HYDRATION"], {
       error: "La catégorie est requise.",
     }),
+
+    /**
+     * `BUNDLE` = coffret. Son stock n'est jamais saisi : il se calcule sur les
+     * composants, dont la composition s'édite dans un second temps (HEP-40).
+     */
+    kind: z.enum(["SIMPLE", "BUNDLE"], { error: "Le type est requis." }),
+
     status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"], {
       error: "Le statut est requis.",
     }),
@@ -176,6 +183,34 @@ export const productFormSchema = z
   );
 
 export type ProductFormInput = z.infer<typeof productFormSchema>;
+
+/**
+ * Composition d'un coffret (HEP-40).
+ *
+ * Le stock du coffret n'est **jamais** saisi : il se déduit des composants.
+ * Seule la liste « quel produit, en quelle quantité » est éditable.
+ */
+export const bundleCompositionSchema = z.object({
+  bundleSlug: z.string().min(1),
+  components: z
+    .array(
+      z.object({
+        slug: z.string().min(1, { error: "Composant invalide." }),
+        qty: z
+          .number({ error: "La quantité doit être un nombre." })
+          .int({ error: "La quantité doit être un nombre entier." })
+          .min(1, { error: "La quantité doit être d'au moins 1." })
+          .max(50, { error: "La quantité maximale est de 50." }),
+      }),
+    )
+    .min(1, { error: "Un coffret doit contenir au moins un produit." })
+    .refine(
+      (list) => new Set(list.map((c) => c.slug)).size === list.length,
+      { error: "Un même produit ne peut pas figurer deux fois dans un coffret." },
+    ),
+});
+
+export type BundleCompositionInput = z.infer<typeof bundleCompositionSchema>;
 
 /** Réordonnancement : liste de slugs dans l'ordre d'affichage voulu. */
 export const reorderSchema = z.object({

@@ -63,6 +63,18 @@ export async function createTestProduct(overrides: {
  * explicite, les entrées s'accumuleraient d'un test à l'autre.
  */
 export async function cleanupTestProducts() {
+  // Les liens de coffret partent d'abord : `BundleComponent.componentId` est
+  // en `onDelete: Restrict`, et c'est voulu — en production, supprimer un
+  // produit encore utilisé dans un coffret doit échouer plutôt que vider
+  // silencieusement la composition.
+  await testDb.bundleComponent.deleteMany({
+    where: {
+      OR: [
+        { bundle: { slug: { startsWith: "test-" } } },
+        { component: { slug: { startsWith: "test-" } } },
+      ],
+    },
+  });
   await testDb.product.deleteMany({ where: { slug: { startsWith: "test-" } } });
   await testDb.auditLog.deleteMany({ where: { actorId: { startsWith: "admin-test" } } });
 }

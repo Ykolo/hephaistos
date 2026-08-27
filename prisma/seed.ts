@@ -168,6 +168,51 @@ async function main() {
     console.log(`✓ ${p.name} — ${(p.priceCents / 100).toFixed(2)} € (${p.sku})`);
   }
 
+  // --- Le coffret (HEP-40) --------------------------------------------------
+  // Produit composé : il n'a pas de stock propre, il consomme celui des trois
+  // références. Créé en BROUILLON et au prix exact de la somme des composants
+  // (55 €) : le prix d'une offre coffret est une décision commerciale, pas un
+  // calcul, et il n'a pas encore été pris. Publier un prix inventé serait pire
+  // que ne rien publier.
+  const coffret = await db.product.upsert({
+    where: { slug: "coffret" },
+    update: {},
+    create: {
+      slug: "coffret",
+      sku: "HEP-COF-001", // PROVISIONAL
+      name: "Le Coffret",
+      tagline: "Le rituel complet",
+      description:
+        "Les trois gestes réunis : nettoyer, réguler, hydrater. Le rituel complet en un seul coffret.",
+      category: "TREATMENT",
+      kind: "BUNDLE",
+      priceCents: 5500, // PROVISIONAL — somme des composants, sans remise
+      weightGrams: 400, // PROVISIONAL — somme + emballage du coffret
+      status: "DRAFT",
+      availability: "COMING_SOON",
+      stock: 0, // jamais utilisé pour un coffret : le stock est calculé
+      position: catalogue.length,
+    },
+  });
+
+  const components = await db.product.findMany({
+    where: { slug: { in: catalogue.map((p) => p.slug) } },
+    select: { id: true },
+  });
+
+  await db.bundleComponent.deleteMany({ where: { bundleId: coffret.id } });
+  await db.bundleComponent.createMany({
+    data: components.map((c) => ({
+      bundleId: coffret.id,
+      componentId: c.id,
+      qty: 1,
+    })),
+  });
+
+  console.log(
+    `✓ Le Coffret — 55.00 € (brouillon, ${components.length} composants)`,
+  );
+
   // Réglages entreprise : une seule ligne, alimente factures et mentions
   // légales (HEP-80). Les valeurs réelles (SIRET, TVA, capital) sont encore
   // attendues de Jules — cf. docs/BACKEND.md §6.

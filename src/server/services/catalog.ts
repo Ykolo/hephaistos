@@ -1,3 +1,4 @@
+import { ActionError } from "../errors";
 import type { Tx } from "../db";
 import type { ProductCategory, ProductView } from "@/lib/products";
 import type { Category, ImageRole, Prisma } from "@/generated/prisma/client";
@@ -21,6 +22,8 @@ const CATEGORY_LABEL: Record<Category, ProductCategory> = {
 /** Ce que la projection publique a besoin de lire, et rien de plus. */
 const productSelect = {
   slug: true,
+  kind: true,
+  stock: true,
   name: true,
   tagline: true,
   description: true,
@@ -44,10 +47,16 @@ const productSelect = {
     select: { blobUrl: true, role: true },
     orderBy: { position: "asc" },
   },
+  // Nécessaire au stock calculé des coffrets (HEP-40).
+  components: {
+    select: { qty: true, component: { select: { stock: true } } },
+  },
 } as const;
 
 type ProductRow = {
   slug: string;
+  kind: "SIMPLE" | "BUNDLE";
+  stock: number;
   name: string;
   tagline: string | null;
   description: string;
@@ -65,7 +74,26 @@ type ProductRow = {
   updatedAt: Date;
   benefits: { label: string }[];
   images: { blobUrl: string; role: ImageRole }[];
+  components: { qty: number; component: { stock: number } }[];
 };
+
+/**
+ * Stock vendable — **calculé** pour un coffret, jamais lu sur lui.
+ *
+ * `min(stock du composant / quantité requise)` : un coffret dont un seul
+ * composant manque n'est pas vendable, quel que soit l'état des deux autres.
+ * Même règle que `availableUnits()` dans le service stock, appliquée ici sur
+ * les données déjà chargées pour éviter une requête par produit.
+ */
+function computeAvailableUnits(row: ProductRow): number {
+  if (row.kind === "SIMPLE") return row.stock;
+  if (row.components.length === 0) return 0;
+  return Math.min(
+    ...row.components.map((c) =>
+      Math.floor(c.component.stock / Math.max(c.qty, 1)),
+    ),
+  );
+}
 
 function toView(row: ProductRow): ProductView {
   const byRole = (role: ImageRole) =>
@@ -76,16 +104,27 @@ function toView(row: ProductRow): ProductView {
   // visiblement en développement plutôt que silencieusement en production.
   const image = byRole("PRIMARY") ?? row.images[0]?.blobUrl ?? "";
 
+  const units = computeAvailableUnits(row);
+
   return {
     slug: row.slug,
     name: row.name,
+    kind: row.kind,
+    availableUnits: units,
     category: CATEGORY_LABEL[row.category],
     tagline: row.tagline,
     description: row.description,
     priceCents: row.priceCents,
     compareAtCents: row.compareAtCents,
     volumeMl: row.volumeMl,
-    availability: row.availability,
+    // Un coffret annoncé en stock mais dont un composant manque doit
+    // s'afficher épuisé : le client ne doit pas découvrir la rupture au
+    // paiement. Les autres états (bientôt, précommande, arrêté) décrivent
+    // déjà une indisponibilité et ne sont pas réécrits.
+    availability:
+      row.availability === "IN_STOCK" && units <= 0
+        ? "OUT_OF_STOCK"
+        : row.availability,
     preorderShipsAt: row.preorderShipsAt,
     image,
     imageHover: byRole("HOVER") ?? image,
@@ -184,6 +223,7 @@ type ProductWriteData = {
   description: string;
   tagline: string | null;
   category: Category;
+  kind: "SIMPLE" | "BUNDLE";
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   availability: ProductView["availability"];
   priceCents: number;
@@ -268,6 +308,88 @@ export async function upsertProduct(
   }
 
   return { id: existing.id, created: false };
+}
+
+/**
+ * Remplace la composition d'un coffret (HEP-40).
+ *
+ * Deux refus explicites plutôt qu'un état incohérent découvert à la vente :
+ * un coffret ne peut pas se contenir lui-même, ni contenir un autre coffret.
+ * Le second cas rendrait le calcul de stock récursif et le décrément
+ * impossible à ordonner — donc les interblocages inévitables.
+ */
+export async function setBundleComposition(
+  db: Tx,
+  bundleSlug: string,
+  components: { slug: string; qty: number }[],
+  actorId: string,
+): Promise<void> {
+  const bundle = await db.product.findUnique({
+    where: { slug: bundleSlug },
+    select: { id: true, kind: true },
+  });
+  if (!bundle) throw new ActionError("NOT_FOUND", "Ce coffret est introuvable.");
+  if (bundle.kind !== "BUNDLE") {
+    throw new ActionError(
+      "VALIDATION",
+      "Ce produit n'est pas un coffret : passez son type à BUNDLE avant d'en définir la composition.",
+    );
+  }
+
+  const rows = await db.product.findMany({
+    where: { slug: { in: components.map((c) => c.slug) } },
+    select: { id: true, slug: true, kind: true, name: true },
+  });
+
+  const bySlug = new Map(rows.map((r) => [r.slug, r]));
+  const resolved = components.map((c) => {
+    const row = bySlug.get(c.slug);
+    if (!row) {
+      throw new ActionError("NOT_FOUND", `Le produit « ${c.slug} » est introuvable.`);
+    }
+    if (row.id === bundle.id) {
+      throw new ActionError(
+        "VALIDATION",
+        "Un coffret ne peut pas se contenir lui-même.",
+      );
+    }
+    if (row.kind === "BUNDLE") {
+      throw new ActionError(
+        "VALIDATION",
+        `« ${row.name} » est un coffret : les coffrets imbriqués ne sont pas autorisés.`,
+      );
+    }
+    return { componentId: row.id, qty: c.qty };
+  });
+
+  // Remplacement en bloc : une composition partiellement mise à jour vendrait
+  // un coffret qui ne correspond plus à ce qu'on prépare.
+  await db.bundleComponent.deleteMany({ where: { bundleId: bundle.id } });
+  await db.bundleComponent.createMany({
+    data: resolved.map((r) => ({ bundleId: bundle.id, ...r })),
+  });
+
+  await db.auditLog.create({
+    data: {
+      actorId,
+      entity: "Product",
+      entityId: bundle.id,
+      action: "bundle.composition",
+      diff: { composition: components } as unknown as Prisma.InputJsonObject,
+    },
+  });
+}
+
+/** Composition actuelle d'un coffret, pour l'écran d'administration. */
+export async function getBundleComposition(db: Tx, bundleSlug: string) {
+  return db.bundleComponent.findMany({
+    where: { bundle: { slug: bundleSlug } },
+    select: {
+      qty: true,
+      component: { select: { slug: true, name: true, stock: true, sku: true } },
+    },
+    orderBy: { componentId: "asc" },
+  });
 }
 
 /** Applique un nouvel ordre d'affichage, dans une seule transaction. */
