@@ -44,3 +44,6 @@ next-env.d.ts
 
 # prisma — client régénéré au build (`bun run db:generate`)
 /src/generated
+
+# uploads du pilote de stockage local (dev) — jamais versionnés
+/public/uploads
