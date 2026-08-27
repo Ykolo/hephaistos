@@ -265,6 +265,51 @@ export const bundleCompositionSchema = z.object({
 
 export type BundleCompositionInput = z.infer<typeof bundleCompositionSchema>;
 
+/**
+ * Réception d'un lot de marchandise (HEP-44).
+ *
+ * Le format du code reste volontairement libre : le référentiel des lots est
+ * à cadrer avec Anita. Imposer un masque maintenant obligerait à ressaisir
+ * l'historique le jour où le vrai format sera arrêté.
+ */
+export const batchSchema = z.object({
+  productSlug: z.string().min(1, { error: "Le produit est requis." }),
+  code: z
+    .string({ error: "Le numéro de lot est requis." })
+    .trim()
+    .min(1, { error: "Le numéro de lot est requis." })
+    .max(40, { error: "Le numéro de lot ne peut pas dépasser 40 caractères." }),
+  quantity: z
+    .string({ error: "La quantité est requise." })
+    .trim()
+    .transform((raw, ctx) => {
+      const n = Number(raw.replace(/\s/g, ""));
+      if (!Number.isInteger(n) || n <= 0) {
+        ctx.addIssue({
+          code: "custom",
+          message: "La quantité doit être un nombre entier supérieur à zéro.",
+        });
+        return z.NEVER;
+      }
+      return n;
+    }),
+  expiresAt: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : null)),
+});
+
+export type BatchInput = z.infer<typeof batchSchema>;
+
+/** Recherche de rappel produit. */
+export const recallSchema = z.object({
+  code: z
+    .string({ error: "Le numéro de lot est requis." })
+    .trim()
+    .min(1, { error: "Le numéro de lot est requis." }),
+});
+
 /** Réordonnancement : liste de slugs dans l'ordre d'affichage voulu. */
 export const reorderSchema = z.object({
   slugs: z
