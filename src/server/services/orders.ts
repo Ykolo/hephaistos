@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import type { OrderStatus } from "@/generated/prisma/client";
 import type { Tx } from "../db";
 import { ActionError } from "../errors";
 import {
@@ -10,7 +11,7 @@ import {
 import type { Address } from "@/lib/validation/address";
 
 /**
- * Commandes — modèle et création (HEP-52).
+ * Commandes — modèle et création (HEP-52), cycle de vie (HEP-53).
  *
  * La règle qui gouverne tout ce fichier : **une commande est un instantané**.
  * Changer un prix, renommer un produit ou l'archiver demain ne doit modifier
@@ -205,6 +206,19 @@ export async function createOrder(
     select: { id: true, number: true, publicToken: true },
   });
 
+  // Première entrée du journal : sans elle, la vie de la commande commencerait
+  // à son premier changement d'état et sa naissance serait déduite plutôt que
+  // lue (HEP-53).
+  await tx.orderEvent.create({
+    data: {
+      orderId: order.id,
+      from: null,
+      to: "PENDING",
+      actorId: actorId({ kind: "customer" }),
+      note: "Commande créée depuis le panier.",
+    },
+  });
+
   return { ...order, totals };
 }
 
@@ -245,6 +259,251 @@ export async function findOrderByPublicToken(tx: Tx, token: string) {
           qty: true,
         },
       },
+    },
+  });
+}
+
+// --- Cycle de vie (HEP-53) --------------------------------------------------
+
+/**
+ * Qui provoque le changement d'état.
+ *
+ * `actorId` est une chaîne libre en base et le restera : Better Auth (HEP-62)
+ * n'existe pas encore, et le webhook Stripe n'aura de toute façon jamais
+ * d'identifiant d'utilisateur. Les sentinelles sont donc préfixées pour rester
+ * distinguables d'un vrai identifiant le jour où il y en aura.
+ */
+export type OrderActor =
+  | { kind: "admin"; id: string }
+  | { kind: "customer" }
+  /** Tâche automatique : cron, relance, expiration. */
+  | { kind: "system" }
+  /** Webhook Stripe — la seule source de vérité du paiement (HEP-59). */
+  | { kind: "stripe" };
+
+function actorId(actor: OrderActor): string {
+  switch (actor.kind) {
+    case "admin":
+      return actor.id;
+    case "customer":
+      return "@client";
+    case "system":
+      return "@systeme";
+    case "stripe":
+      return "@stripe";
+  }
+}
+
+/**
+ * **Table de transitions explicite. Tout ce qui n'y figure pas est refusé.**
+ *
+ * Une commande expédiée ne redevient jamais « en préparation ». Si Jules s'est
+ * trompé, on écrit un événement correctif — on ne réécrit pas l'histoire. Un
+ * état qui pourrait revenir en arrière rendrait le journal ininterprétable et,
+ * plus concrètement, ferait repartir les mails déjà envoyés.
+ *
+ * `PARTIALLY_REFUNDED` ne figure pas dans l'énoncé de l'issue mais existe dans
+ * le schéma : un remboursement partiel (HEP-60) ne clôt pas la commande, et
+ * seul un remboursement total la mène à `REFUNDED`.
+ *
+ * Note d'orthographe : le schéma dit `CANCELED` (un seul L, orthographe
+ * américaine), l'issue `CANCELLED`. C'est l'énumération Prisma qui fait foi.
+ */
+export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
+  PENDING: ["PAID", "CANCELED"],
+  PAID: ["PREPARING", "CANCELED", "PARTIALLY_REFUNDED", "REFUNDED"],
+  PREPARING: ["SHIPPED", "CANCELED", "PARTIALLY_REFUNDED", "REFUNDED"],
+  SHIPPED: ["DELIVERED", "PARTIALLY_REFUNDED", "REFUNDED"],
+  DELIVERED: ["PARTIALLY_REFUNDED", "REFUNDED"],
+  PARTIALLY_REFUNDED: ["REFUNDED"],
+  // Terminaux : plus rien ne sort d'ici.
+  CANCELED: [],
+  REFUNDED: [],
+};
+
+export function canTransition(from: OrderStatus, to: OrderStatus): boolean {
+  return ORDER_TRANSITIONS[from].includes(to);
+}
+
+/**
+ * Mails transactionnels du lot 6 (HEP-66), déclarés **ici et nulle part
+ * ailleurs**.
+ *
+ * La definition of done demande « exactement un mail, jamais zéro ni deux ».
+ * C'est cette table qui le garantit : envoyer depuis l'admin *et* depuis le
+ * webhook produirait deux mails pour un même passage à `PAID`, et un état
+ * changé par un chemin oublié n'en produirait aucun.
+ *
+ * `null` est une décision, pas un trou : `PREPARING` est un état interne, et
+ * `DELIVERED` est déjà notifié par le transporteur. Prévenir le client que sa
+ * commande est « en préparation » n'apporte rien et use la boîte mail.
+ */
+export const TRANSITION_EMAIL: Record<OrderStatus, string | null> = {
+  PENDING: null, // la commande n'est pas payée : rien à annoncer
+  PAID: "commande-confirmee",
+  PREPARING: null,
+  SHIPPED: "commande-expediee",
+  DELIVERED: null,
+  CANCELED: "commande-annulee",
+  PARTIALLY_REFUNDED: "remboursement-partiel",
+  REFUNDED: "remboursement",
+};
+
+/** Variante précommande : le client attend, le message n'est pas le même. */
+const PREORDER_EMAIL: Partial<Record<OrderStatus, string>> = {
+  PAID: "precommande-enregistree",
+  SHIPPED: "precommande-expediee",
+};
+
+export type TransitionInput = {
+  orderId: string;
+  to: OrderStatus;
+  actor: OrderActor;
+  /** Motif, référence Stripe, numéro de suivi — ce qui rend le journal lisible. */
+  note?: string;
+};
+
+export type TransitionResult = {
+  from: OrderStatus;
+  to: OrderStatus;
+  /**
+   * `false` quand la commande était **déjà** dans l'état demandé.
+   *
+   * Ce n'est pas une erreur : le webhook Stripe rejoue ses événements, et un
+   * rejeu doit être silencieux. Aucun événement n'est journalisé, aucun mail
+   * n'est demandé — c'est ce qui évite le second « commande confirmée ».
+   */
+  changed: boolean;
+  /** Gabarit à envoyer, ou `null` si cette transition n'en déclenche aucun. */
+  email: string | null;
+};
+
+/**
+ * Fait passer une commande d'un état à un autre, ou refuse.
+ *
+ * ⚠️ **À appeler dans un `$transaction`** : l'écriture de l'état et celle du
+ * journal doivent tomber ou passer ensemble. Un état changé sans événement
+ * rend le journal menteur, et c'est justement ce que HEP-53 existe pour éviter.
+ */
+export async function transitionOrder(
+  tx: Tx,
+  input: TransitionInput,
+): Promise<TransitionResult> {
+  const order = await tx.order.findUnique({
+    where: { id: input.orderId },
+    select: { status: true, isPreorder: true },
+  });
+  if (!order) throw new ActionError("NOT_FOUND", "Cette commande est introuvable.");
+
+  const from = order.status;
+
+  if (from === input.to) {
+    return { from, to: input.to, changed: false, email: null };
+  }
+
+  if (!canTransition(from, input.to)) {
+    throw new ActionError(
+      "INVALID_TRANSITION",
+      `Une commande ${LABELS[from]} ne peut pas passer ${LABELS[input.to]}.`,
+    );
+  }
+
+  // Écriture conditionnée à l'état lu : si un autre administrateur — ou le
+  // webhook — a bougé la commande entre le SELECT et l'UPDATE, la condition ne
+  // matche plus et rien n'est écrit. Un `update` simple aurait écrasé sa
+  // décision sans que personne ne le sache.
+  const { count } = await tx.order.updateMany({
+    where: { id: input.orderId, status: from },
+    data: {
+      status: input.to,
+      ...(input.to === "PAID" ? { paidAt: new Date() } : {}),
+      ...(input.to === "SHIPPED" ? { shippedAt: new Date() } : {}),
+    },
+  });
+
+  if (count === 0) {
+    throw new ActionError(
+      "INVALID_TRANSITION",
+      "Cette commande vient d'être modifiée ailleurs. Rechargez la page.",
+    );
+  }
+
+  await tx.orderEvent.create({
+    data: {
+      orderId: input.orderId,
+      from,
+      to: input.to,
+      actorId: actorId(input.actor),
+      note: input.note ?? null,
+    },
+  });
+
+  const email =
+    (order.isPreorder ? PREORDER_EMAIL[input.to] : undefined) ??
+    TRANSITION_EMAIL[input.to];
+
+  return { from, to: input.to, changed: true, email };
+}
+
+/** Libellés français, pour des messages d'erreur lisibles par Jules. */
+const LABELS: Record<OrderStatus, string> = {
+  PENDING: "en attente de paiement",
+  PAID: "payée",
+  PREPARING: "en préparation",
+  SHIPPED: "expédiée",
+  DELIVERED: "livrée",
+  CANCELED: "annulée",
+  REFUNDED: "remboursée",
+  PARTIALLY_REFUNDED: "partiellement remboursée",
+};
+
+/**
+ * Journal complet d'une commande, du plus ancien au plus récent.
+ *
+ * Ordonné par date **puis par identifiant** : deux événements écrits dans la
+ * même milliseconde — une transition immédiatement suivie d'une autre —
+ * sortiraient sinon dans un ordre arbitraire, et l'histoire se lirait à
+ * l'envers une fois sur deux.
+ */
+export async function listOrderEvents(tx: Tx, orderId: string) {
+  return tx.orderEvent.findMany({
+    where: { orderId },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { from: true, to: true, actorId: true, note: true, createdAt: true },
+  });
+}
+
+/**
+ * Note interne libre, visible en administration seulement.
+ *
+ * Elle n'apparaît ni dans le suivi public (`findOrderByPublicToken` ne la
+ * sélectionne pas), ni dans un mail, ni sur la facture. C'est le carnet de
+ * Jules : « client rappelé, accepte un envoi le 12 ».
+ */
+export async function setInternalNote(
+  tx: Tx,
+  orderId: string,
+  note: string,
+  actor: OrderActor,
+): Promise<void> {
+  const trimmed = note.trim();
+
+  const { count } = await tx.order.updateMany({
+    where: { id: orderId },
+    data: { internalNote: trimmed === "" ? null : trimmed },
+  });
+  if (count === 0) {
+    throw new ActionError("NOT_FOUND", "Cette commande est introuvable.");
+  }
+
+  // La note passe aussi au journal : savoir *quand* une consigne a été écrite
+  // vaut souvent plus que la consigne elle-même.
+  await tx.auditLog.create({
+    data: {
+      actorId: actorId(actor),
+      entity: "Order",
+      entityId: orderId,
+      action: "internal-note",
     },
   });
 }
