@@ -19,6 +19,7 @@ export const ERROR_CODES = [
   "OUT_OF_STOCK",
   "PRODUCT_UNAVAILABLE", // brouillon, archivé, ou pas encore en vente
   "CART_EXPIRED",
+  "INVALID_TRANSITION", // changement d'état de commande interdit (HEP-53)
   "INVALID_DISCOUNT",
   "DISCOUNT_EXPIRED",
   "DISCOUNT_ALREADY_USED",
@@ -67,6 +68,7 @@ export const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   OUT_OF_STOCK: "Ce produit n'est plus disponible en quantité suffisante.",
   PRODUCT_UNAVAILABLE: "Ce produit n'est pas disponible à la vente.",
   CART_EXPIRED: "Votre panier a expiré. Les articles ont été libérés.",
+  INVALID_TRANSITION: "Ce changement d'état n'est pas possible pour cette commande.",
   INVALID_DISCOUNT: "Ce code promo est invalide.",
   DISCOUNT_EXPIRED: "Ce code promo n'est plus valable.",
   DISCOUNT_ALREADY_USED: "Ce code promo a déjà été utilisé.",
