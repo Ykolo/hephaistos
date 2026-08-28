@@ -95,13 +95,13 @@ function DrawerContent({ close }: { close: () => void }) {
                       Sous-total
                     </span>
                     <span className="font-serif text-[1.3rem]">
-                      {formatPriceCompact(cart.subtotalCents)}
+                      {formatPriceCompact(cart.totals.subtotalCents)}
                     </span>
                   </div>
                   {/*
                     Mention obligatoire, et honnêteté commerciale : le total
-                    affiché n'est pas encore le montant à payer. Le calcul
-                    complet — remise, livraison, TVA — arrive avec HEP-47.
+                    affiché n'est pas encore le montant à payer — la livraison
+                    manque encore (`totals.shippingKnown` est faux ici).
                   */}
                   <p className="m-0 mb-5 text-[11.5px] leading-[1.5] text-muted-ink">
                     TVA incluse. Frais de livraison calculés à l&apos;étape

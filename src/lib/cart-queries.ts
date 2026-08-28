@@ -14,6 +14,7 @@ import {
   setCartQty,
 } from "@/server/actions/cart";
 import type { CartView } from "@/server/services/cart";
+import { computeTotals } from "@/server/services/pricing";
 
 /**
  * Couche cliente du panier (HEP-50).
@@ -28,18 +29,19 @@ import type { CartView } from "@/server/services/cart";
 
 export const cartKey = ["cart"] as const;
 
-const EMPTY: CartView = {
-  lines: [],
-  itemCount: 0,
-  subtotalCents: 0,
-  hasUnavailableLines: false,
-};
+const EMPTY: CartView = withTotals([]);
 
 export function useCart() {
   return useQuery({
     queryKey: cartKey,
     queryFn: () => getCart(),
+    // Panier vide comme état de départ, pour ne jamais rendre `undefined`.
     initialData: EMPTY,
+    // Sans cette ligne, TanStack considère `initialData` comme **fraîche** et
+    // le `staleTime` l'empêche d'aller chercher le vrai panier : rouvrir
+    // /panier affichait « votre panier est vide » alors qu'il ne l'était pas.
+    // Datée de l'époque, elle est périmée d'emblée et déclenche le chargement.
+    initialDataUpdatedAt: 0,
     staleTime: 30_000,
   });
 }
@@ -54,12 +56,21 @@ function optimistic(
   return { previous };
 }
 
-/** Recalcule les totaux après une modification locale des lignes. */
+/**
+ * Recalcule les totaux après une modification locale des lignes.
+ *
+ * Passe par le **même** moteur que le serveur (HEP-47) plutôt que par une
+ * somme écrite ici : deux formules, ce sont deux montants, et le client verrait
+ * son total sauter au retour de la requête.
+ */
 function withTotals(lines: CartView["lines"]): CartView {
+  const totals = computeTotals({ lines });
   return {
-    lines,
+    // Le total de ligne vient du moteur, pas d'une multiplication recopiée
+    // dans chaque `onMutate`.
+    lines: lines.map((l, i) => ({ ...l, lineTotalCents: totals.lines[i].lineTotalCents })),
     itemCount: lines.reduce((n, l) => n + l.qty, 0),
-    subtotalCents: lines.reduce((n, l) => n + l.lineTotalCents, 0),
+    totals,
     hasUnavailableLines: lines.some(
       (l) => !l.isPreorder && l.qty > l.availableUnits,
     ),
@@ -79,13 +90,7 @@ export function useAddToCart() {
     onMutate: (vars) =>
       optimistic(qc, (cart) => {
         const lines = cart.lines.map((l) =>
-          l.slug === vars.slug
-            ? {
-                ...l,
-                qty: l.qty + (vars.qty ?? 1),
-                lineTotalCents: l.unitPriceCents * (l.qty + (vars.qty ?? 1)),
-              }
-            : l,
+          l.slug === vars.slug ? { ...l, qty: l.qty + (vars.qty ?? 1) } : l,
         );
         // Produit absent du panier : impossible de deviner son prix ni son
         // visuel côté client. On laisse la réponse serveur l'introduire.
@@ -114,13 +119,7 @@ export function useSetCartQty() {
           vars.qty <= 0
             ? cart.lines.filter((l) => l.slug !== vars.slug)
             : cart.lines.map((l) =>
-                l.slug === vars.slug
-                  ? {
-                      ...l,
-                      qty: vars.qty,
-                      lineTotalCents: l.unitPriceCents * vars.qty,
-                    }
-                  : l,
+                l.slug === vars.slug ? { ...l, qty: vars.qty } : l,
               ),
         ),
       ),

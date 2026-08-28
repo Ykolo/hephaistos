@@ -68,7 +68,8 @@ describe("panier — cycle de vie", () => {
 
   it("un token inconnu renvoie un panier vide, pas une erreur", async () => {
     const view = await getCartView(testDb, token());
-    expect(view).toMatchObject({ itemCount: 0, subtotalCents: 0, lines: [] });
+    expect(view).toMatchObject({ itemCount: 0, lines: [] });
+    expect(view.totals.subtotalCents).toBe(0);
   });
 
   it("prolonge l'expiration à chaque interaction", async () => {
@@ -110,14 +111,14 @@ describe("panier — aucun montant n'est stocké", () => {
     const p = await createTestProduct({ stock: 10 });
     await addItem(testDb, t, p.slug, 2);
 
-    expect((await getCartView(testDb, t)).subtotalCents).toBe(4000);
+    expect((await getCartView(testDb, t)).totals.subtotalCents).toBe(4000);
 
     await testDb.product.update({
       where: { id: p.id },
       data: { priceCents: 2500 },
     });
 
-    expect((await getCartView(testDb, t)).subtotalCents).toBe(5000);
+    expect((await getCartView(testDb, t)).totals.subtotalCents).toBe(5000);
   });
 });
 
