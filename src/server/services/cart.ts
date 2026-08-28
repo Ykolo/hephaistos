@@ -1,6 +1,7 @@
 import type { Tx } from "../db";
 import { ActionError } from "../errors";
 import { availableUnits } from "./stock";
+import type { StockReason } from "@/generated/prisma/client";
 
 /**
  * Panier serveur (HEP-46).
@@ -20,8 +21,23 @@ export const MAX_QTY_PER_LINE = 10;
 /** Durée de vie du panier. Prolongée à chaque interaction. */
 export const CART_TTL_DAYS = 30;
 
+/**
+ * Durée d'une réservation de stock (HEP-48).
+ *
+ * 30 minutes, alignées sur l'expiration d'une session Stripe Checkout.
+ *
+ * Plus court, le client perd son panier en cherchant sa carte. Plus long, des
+ * paniers fantômes affichent « rupture » à de vrais clients — sur douze
+ * flacons en stock, quelques abandons suffisent à bloquer la boutique.
+ */
+export const RESERVATION_MINUTES = 30;
+
 function expiry(): Date {
   return new Date(Date.now() + CART_TTL_DAYS * 24 * 60 * 60 * 1000);
+}
+
+function reservationExpiry(): Date {
+  return new Date(Date.now() + RESERVATION_MINUTES * 60 * 1000);
 }
 
 /**
@@ -44,11 +60,45 @@ export async function getOrCreateCart(db: Tx, token: string) {
   });
 }
 
-/** Prolonge la durée de vie — appelé à chaque mutation. */
+/**
+ * Prolonge la durée de vie du panier **et** de ses réservations.
+ *
+ * Appelé à chaque mutation : un client qui manipule son panier ne doit pas
+ * voir son stock libéré sous lui pendant qu'il hésite.
+ */
 async function touch(db: Tx, cartId: string) {
   await db.cart.update({
     where: { id: cartId },
     data: { expiresAt: expiry() },
+  });
+  await db.cartItem.updateMany({
+    where: { cartId },
+    data: { reservedUntil: reservationExpiry() },
+  });
+}
+
+/**
+ * Trace une réservation ou sa libération.
+ *
+ * Ces mouvements sont exclus du contrôle de cohérence du stock (cf.
+ * `stockFromMovements`) : ils ne déplacent rien, ils documentent pourquoi un
+ * produit a pu paraître indisponible à un instant donné.
+ */
+async function recordReservation(
+  db: Tx,
+  productId: string,
+  qty: number,
+  reason: Extract<StockReason, "RESERVE" | "RELEASE">,
+  cartId: string,
+) {
+  if (qty === 0) return;
+  await db.stockMovement.create({
+    data: {
+      productId,
+      delta: reason === "RESERVE" ? -qty : qty,
+      reason,
+      note: `Panier ${cartId}`,
+    },
   });
 }
 
@@ -58,7 +108,12 @@ async function touch(db: Tx, cartId: string) {
  * Le contrôle vit ici et pas dans l'action : c'est la seule façon de garantir
  * qu'aucun chemin d'ajout ne puisse le contourner.
  */
-async function assertPurchasable(db: Tx, slug: string, qty: number) {
+async function assertPurchasable(
+  db: Tx,
+  slug: string,
+  qty: number,
+  cartId?: string,
+) {
   if (!Number.isInteger(qty) || qty < 1) {
     throw new ActionError("VALIDATION", "La quantité doit être d'au moins 1.");
   }
@@ -93,7 +148,11 @@ async function assertPurchasable(db: Tx, slug: string, qty: number) {
 
   // La précommande se vend sans stock : c'est sa raison d'être (HEP-42).
   if (product.availability !== "PREORDER") {
-    const units = await availableUnits(db, product.id);
+    // `excludeCartId` : sans lui, le client verrait sa propre réservation
+    // comme un obstacle et ne pourrait jamais passer de 1 à 2.
+    const units = await availableUnits(db, product.id, {
+      excludeCartId: cartId,
+    });
     if (units < qty) {
       throw new ActionError(
         "OUT_OF_STOCK",
@@ -127,19 +186,25 @@ export async function addItem(
   });
 
   const target = (existing?.qty ?? 0) + qty;
-  const product = await assertPurchasable(db, slug, target);
+  const product = await assertPurchasable(db, slug, target, cart.id);
 
   if (existing) {
     await db.cartItem.update({
       where: { id: existing.id },
-      data: { qty: target },
+      data: { qty: target, reservedUntil: reservationExpiry() },
     });
   } else {
     await db.cartItem.create({
-      data: { cartId: cart.id, productId: product.id, qty: target },
+      data: {
+        cartId: cart.id,
+        productId: product.id,
+        qty: target,
+        reservedUntil: reservationExpiry(),
+      },
     });
   }
 
+  await recordReservation(db, product.id, qty, "RESERVE", cart.id);
   await touch(db, cart.id);
 }
 
@@ -153,15 +218,27 @@ export async function updateQty(
   if (qty <= 0) return removeItem(db, token, slug);
 
   const cart = await getOrCreateCart(db, token);
-  await assertPurchasable(db, slug, qty);
+  const product = await assertPurchasable(db, slug, qty, cart.id);
 
   const item = await db.cartItem.findFirst({
     where: { cartId: cart.id, product: { slug } },
-    select: { id: true },
+    select: { id: true, qty: true },
   });
   if (!item) throw new ActionError("NOT_FOUND", "Cet article n'est pas dans le panier.");
 
-  await db.cartItem.update({ where: { id: item.id }, data: { qty } });
+  await db.cartItem.update({
+    where: { id: item.id },
+    data: { qty, reservedUntil: reservationExpiry() },
+  });
+
+  // Seul l'écart est tracé : passer de 2 à 5 réserve 3 de plus, pas 5.
+  const delta = qty - item.qty;
+  if (delta > 0) {
+    await recordReservation(db, product.id, delta, "RESERVE", cart.id);
+  } else if (delta < 0) {
+    await recordReservation(db, product.id, -delta, "RELEASE", cart.id);
+  }
+
   await touch(db, cart.id);
 }
 
@@ -171,16 +248,80 @@ export async function removeItem(
   slug: string,
 ): Promise<void> {
   const cart = await getOrCreateCart(db, token);
-  await db.cartItem.deleteMany({
+
+  const item = await db.cartItem.findFirst({
     where: { cartId: cart.id, product: { slug } },
+    select: { id: true, qty: true, productId: true, reservedUntil: true },
   });
+  if (!item) return;
+
+  await db.cartItem.delete({ where: { id: item.id } });
+
+  // Une réservation déjà expirée a été libérée par le cron : la libérer une
+  // seconde fois ferait apparaître un stock qui n'existe pas.
+  if (item.reservedUntil && item.reservedUntil > new Date()) {
+    await recordReservation(db, item.productId, item.qty, "RELEASE", cart.id);
+  }
+
   await touch(db, cart.id);
 }
 
 export async function clearCart(db: Tx, token: string): Promise<void> {
   const cart = await getOrCreateCart(db, token);
+
+  const items = await db.cartItem.findMany({
+    where: { cartId: cart.id },
+    select: { qty: true, productId: true, reservedUntil: true },
+  });
+
   await db.cartItem.deleteMany({ where: { cartId: cart.id } });
+
+  const now = new Date();
+  for (const item of items) {
+    if (item.reservedUntil && item.reservedUntil > now) {
+      await recordReservation(db, item.productId, item.qty, "RELEASE", cart.id);
+    }
+  }
+
   await touch(db, cart.id);
+}
+
+/**
+ * Libère les réservations échues (HEP-48).
+ *
+ * Appelé par le cron. Sans lui, un panier abandonné bloquerait le dernier
+ * flacon indéfiniment.
+ *
+ * La ligne de panier est **conservée** : seule la réservation tombe. Le client
+ * qui revient retrouve son panier ; c'est au moment de valider que la
+ * disponibilité sera revérifiée. Supprimer la ligne le priverait de sa
+ * sélection pour une raison qu'il ne comprendrait pas.
+ */
+export async function releaseExpiredReservations(
+  db: Tx,
+): Promise<{ released: number; units: number }> {
+  const expired = await db.cartItem.findMany({
+    where: { reservedUntil: { not: null, lte: new Date() } },
+    select: { id: true, qty: true, productId: true, cartId: true },
+  });
+
+  if (expired.length === 0) return { released: 0, units: 0 };
+
+  // `reservedUntil` passe à null en premier : si la trace échoue ensuite, on
+  // aura un mouvement manquant plutôt qu'une réservation libérée deux fois.
+  await db.cartItem.updateMany({
+    where: { id: { in: expired.map((e) => e.id) } },
+    data: { reservedUntil: null },
+  });
+
+  for (const item of expired) {
+    await recordReservation(db, item.productId, item.qty, "RELEASE", item.cartId);
+  }
+
+  return {
+    released: expired.length,
+    units: expired.reduce((n, e) => n + e.qty, 0),
+  };
 }
 
 export type CartLine = {
@@ -227,6 +368,7 @@ export async function getCartView(db: Tx, token: string): Promise<CartView> {
   const cart = await db.cart.findUnique({
     where: { token },
     select: {
+      id: true,
       items: {
         orderBy: { id: "asc" },
         select: {
@@ -259,7 +401,9 @@ export async function getCartView(db: Tx, token: string): Promise<CartView> {
   for (const item of cart.items) {
     const p = item.product;
     const isPreorder = p.availability === "PREORDER";
-    const units = await availableUnits(db, p.id);
+    // Le panier courant est exclu : sinon chaque ligne se verrait elle-même
+    // comme une indisponibilité et s'afficherait en rouge.
+    const units = await availableUnits(db, p.id, { excludeCartId: cart.id });
 
     lines.push({
       slug: p.slug,

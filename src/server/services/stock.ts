@@ -245,7 +245,14 @@ export async function stockFromMovements(
   productId: string,
 ): Promise<number> {
   const result = await tx.stockMovement.aggregate({
-    where: { productId },
+    where: {
+      productId,
+      // `RESERVE` et `RELEASE` sont exclus : une réservation ne déplace aucun
+      // flacon, elle en met un de côté. Les compter ferait diverger cette
+      // somme de `Product.stock` et casserait le contrôle de cohérence pour
+      // une raison qui n'est pas une erreur.
+      reason: { notIn: ["RESERVE", "RELEASE"] },
+    },
     _sum: { delta: true },
   });
   return result._sum.delta ?? 0;
@@ -377,27 +384,87 @@ export async function restockProduct(
  *
  * Renvoie le stock propre du produit s'il est simple.
  */
-export async function availableUnits(tx: Tx, productId: string): Promise<number> {
+/**
+ * Quantité réservée par les paniers actifs pour un produit donné (HEP-48).
+ *
+ * Deux sources, et oublier la seconde ferait survendre :
+ *   - les lignes de panier portant directement ce produit ;
+ *   - les lignes portant un **coffret** qui le contient — réserver un coffret
+ *     doit réserver ses composants.
+ *
+ * `excludeCartId` est indispensable : sans lui, un client verrait sa propre
+ * réservation comme un obstacle et ne pourrait pas passer de 1 à 2.
+ */
+export async function reservedQty(
+  tx: Tx,
+  productId: string,
+  excludeCartId?: string,
+): Promise<number> {
+  const rows = await tx.$queryRaw<{ reserved: bigint }[]>`
+    SELECT COALESCE(SUM(qty), 0) AS reserved FROM (
+      SELECT ci."qty"
+        FROM "CartItem" ci
+       WHERE ci."productId" = ${productId}
+         AND ci."reservedUntil" > NOW()
+         AND (${excludeCartId ?? null}::text IS NULL OR ci."cartId" <> ${excludeCartId ?? null}::text)
+      UNION ALL
+      SELECT ci."qty" * bc."qty"
+        FROM "CartItem" ci
+        JOIN "BundleComponent" bc ON bc."bundleId" = ci."productId"
+       WHERE bc."componentId" = ${productId}
+         AND ci."reservedUntil" > NOW()
+         AND (${excludeCartId ?? null}::text IS NULL OR ci."cartId" <> ${excludeCartId ?? null}::text)
+    ) AS r(qty)
+  `;
+  return Number(rows[0]?.reserved ?? 0);
+}
+
+/**
+ * Stock **vendable** d'un produit.
+ *
+ * `stock - réservations actives`, et pour un coffret le minimum sur ses
+ * composants. Passer `excludeCartId` quand le calcul sert à valider une
+ * opération sur un panier précis.
+ */
+export async function availableUnits(
+  tx: Tx,
+  productId: string,
+  opts: { excludeCartId?: string } = {},
+): Promise<number> {
   const product = await tx.product.findUnique({
     where: { id: productId },
     select: {
       kind: true,
       stock: true,
       components: {
-        select: { qty: true, component: { select: { stock: true } } },
+        select: {
+          qty: true,
+          componentId: true,
+          component: { select: { stock: true } },
+        },
       },
     },
   });
 
   if (!product) throw new ActionError("NOT_FOUND", "Ce produit est introuvable.");
-  if (product.kind === "SIMPLE") return product.stock;
+
+  if (product.kind === "SIMPLE") {
+    const reserved = await reservedQty(tx, productId, opts.excludeCartId);
+    return product.stock - reserved;
+  }
+
   if (product.components.length === 0) return 0;
 
-  return Math.min(
-    ...product.components.map((c) =>
-      Math.floor(c.component.stock / Math.max(c.qty, 1)),
-    ),
+  const perComponent = await Promise.all(
+    product.components.map(async (c) => {
+      const reserved = await reservedQty(tx, c.componentId, opts.excludeCartId);
+      return Math.floor(
+        (c.component.stock - reserved) / Math.max(c.qty, 1),
+      );
+    }),
   );
+
+  return Math.min(...perComponent);
 }
 
 /** Produits dont le stock est retombé au niveau d'alerte (tableau de bord, HEP-79). */
