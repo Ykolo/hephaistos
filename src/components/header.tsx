@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { routes, mainNav } from "@/lib/routes";
 import { useUIStore } from "@/store/ui-store";
+import { CartBadge } from "@/components/cart-badge";
 
 function NavLink({
   href,
@@ -112,23 +113,7 @@ export function Header() {
               <line x1="16.5" y1="16.5" x2="21" y2="21" />
             </svg>
           </button>
-          <button
-            onClick={openCart}
-            aria-label="Panier"
-            className="flex cursor-pointer items-center gap-[5px] p-1"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#141414"
-              strokeWidth="1.4"
-            >
-              <path d="M6 8h12l-1 12H7L6 8z" />
-              <path d="M9 8V6a3 3 0 0 1 6 0v2" />
-            </svg>
-          </button>
+          <CartBadge onOpen={openCart} />
         </div>
       </div>
     </header>

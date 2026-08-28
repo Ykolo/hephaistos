@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { action } from "../action";
 import { db } from "../db";
-import { requireCartToken } from "../cart-session";
+import { readCartToken, requireCartToken } from "../cart-session";
+import type { CartView } from "../services/cart";
 import {
   addItem,
   clearCart,
@@ -36,6 +37,27 @@ const qtySchema = z
 function revalidateCart() {
   // Le tiroir vit dans le chrome, donc sur toutes les pages.
   revalidatePath("/", "layout");
+}
+
+/** Panier vide, forme canonique — évite de disperser cette constante. */
+const EMPTY: CartView = {
+  lines: [],
+  itemCount: 0,
+  subtotalCents: 0,
+  hasUnavailableLines: false,
+};
+
+/**
+ * Lecture du panier.
+ *
+ * Utilise `readCartToken` et **non** `requireCartToken` : consulter un panier
+ * ne doit pas en créer un. Sinon chaque visiteur qui affiche une page
+ * repartirait avec un cookie et une ligne en base, sans jamais rien ajouter.
+ */
+export async function getCart(): Promise<CartView> {
+  const token = await readCartToken();
+  if (!token) return EMPTY;
+  return getCartView(db, token);
 }
 
 export const addToCart = action(

@@ -4,6 +4,7 @@ import { Reveal } from "@/components/reveal";
 import { routes } from "@/lib/routes";
 import { formatPriceCompact } from "@/lib/format";
 import type { ProductView } from "@/lib/products";
+import { AddToCart } from "@/components/add-to-cart";
 
 export function ProductCard({ product }: { product: ProductView }) {
   return (
@@ -32,6 +33,19 @@ export function ProductCard({ product }: { product: ProductView }) {
           {product.tagline}
         </p>
       </Link>
+
+      {/*
+        Ajout rapide depuis la grille. Hors du <Link> : imbriquer un bouton
+        dans un lien produit un HTML invalide et un clic ambigu — on ne
+        saurait pas si le visiteur veut la fiche ou l'ajout.
+      */}
+      <AddToCart
+        slug={product.slug}
+        availability={product.availability}
+        availableUnits={product.availableUnits}
+        className="mt-3"
+        compact
+      />
     </Reveal>
   );
 }
