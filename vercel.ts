@@ -19,6 +19,15 @@ export const config: VercelConfig = {
    */
   regions: ["cdg1"],
 
+  /**
+   * Libération des réservations de stock échues (HEP-48).
+   *
+   * Toutes les 5 minutes : la definition of done exige qu'un panier abandonné
+   * rende son stock en moins de 35 minutes, soit 30 de réservation plus une
+   * marge de passage du cron.
+   */
+  crons: [{ path: "/api/cron/reservations", schedule: "*/5 * * * *" }],
+
   headers: [
     {
       /**
