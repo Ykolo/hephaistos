@@ -76,7 +76,7 @@ function CartContent() {
               Sous-total ({cart.itemCount} article{cart.itemCount > 1 ? "s" : ""})
             </span>
             <span className="font-serif text-[1.2rem]">
-              {formatPriceCompact(cart.subtotalCents)}
+              {formatPriceCompact(cart.totals.subtotalCents)}
             </span>
           </div>
 
@@ -84,6 +84,20 @@ function CartContent() {
             <span className="text-[13px] text-body">Livraison</span>
             <span className="text-[13px] text-muted-ink">
               Calculée à l&apos;étape suivante
+            </span>
+          </div>
+
+          {/*
+            La TVA n'est pas ajoutée au sous-total : elle en est extraite
+            (HEP-47). L'afficher rassure sur le fait que le prix annoncé est
+            bien le prix payé — et c'est la ligne que le comptable cherche.
+          */}
+          <div className="mb-5 flex items-baseline justify-between">
+            <span className="text-[13px] text-body">
+              dont TVA ({String(cart.totals.vatRateBps / 100).replace(".", ",")} %)
+            </span>
+            <span className="text-[13px] text-muted-ink">
+              {formatPriceCompact(cart.totals.taxCents)}
             </span>
           </div>
 

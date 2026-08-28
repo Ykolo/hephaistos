@@ -9,6 +9,7 @@ import type { CartView } from "../services/cart";
 import {
   addItem,
   clearCart,
+  emptyCartView,
   getCartView,
   MAX_QTY_PER_LINE,
   removeItem,
@@ -39,14 +40,6 @@ function revalidateCart() {
   revalidatePath("/", "layout");
 }
 
-/** Panier vide, forme canonique — évite de disperser cette constante. */
-const EMPTY: CartView = {
-  lines: [],
-  itemCount: 0,
-  subtotalCents: 0,
-  hasUnavailableLines: false,
-};
-
 /**
  * Lecture du panier.
  *
@@ -56,7 +49,7 @@ const EMPTY: CartView = {
  */
 export async function getCart(): Promise<CartView> {
   const token = await readCartToken();
-  if (!token) return EMPTY;
+  if (!token) return emptyCartView();
   return getCartView(db, token);
 }
 

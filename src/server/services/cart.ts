@@ -1,5 +1,6 @@
 import type { Tx } from "../db";
 import { ActionError } from "../errors";
+import { computeTotals, type Totals } from "./pricing";
 import { availableUnits } from "./stock";
 import type { StockReason } from "@/generated/prisma/client";
 
@@ -325,6 +326,12 @@ export async function releaseExpiredReservations(
 }
 
 export type CartLine = {
+  /**
+   * Identifiant de la ligne pour le moteur de prix, et cible d'une remise
+   * produit (HEP-75). Rien de confidentiel : c'est le même identifiant que
+   * l'admin manipule.
+   */
+  productId: string;
   slug: string;
   name: string;
   qty: number;
@@ -349,10 +356,14 @@ export type CartView = {
   lines: CartLine[];
   itemCount: number;
   /**
-   * Somme des lignes. Ce n'est **pas** le total à payer : remise, livraison
-   * et TVA relèvent du moteur de prix (HEP-47).
+   * Montants calculés par le moteur de prix (HEP-47) — la **seule**
+   * implémentation, partagée avec Stripe, la commande et la facture.
+   *
+   * Aucun mode de livraison n'est fourni à ce stade : `totals.shippingKnown`
+   * vaut `false` et `totals.totalCents` est un total hors livraison. C'est au
+   * tunnel (HEP-58) de repasser par `computeTotals` avec le mode retenu.
    */
-  subtotalCents: number;
+  totals: Totals;
   /** Lignes dont la quantité dépasse le stock devenu disponible. */
   hasUnavailableLines: boolean;
 };
@@ -393,27 +404,35 @@ export async function getCartView(db: Tx, token: string): Promise<CartView> {
     },
   });
 
-  if (!cart) {
-    return { lines: [], itemCount: 0, subtotalCents: 0, hasUnavailableLines: false };
-  }
+  if (!cart) return emptyCartView();
+
+  // Les montants ne sont jamais recalculés ici : le moteur de prix (HEP-47)
+  // est la seule implémentation, du tiroir jusqu'à la facture.
+  const totals = computeTotals({
+    lines: cart.items.map((item) => ({
+      productId: item.product.id,
+      qty: item.qty,
+      unitPriceCents: item.product.priceCents,
+    })),
+  });
 
   const lines: CartLine[] = [];
-  for (const item of cart.items) {
+  for (const [index, item] of cart.items.entries()) {
     const p = item.product;
-    const isPreorder = p.availability === "PREORDER";
     // Le panier courant est exclu : sinon chaque ligne se verrait elle-même
     // comme une indisponibilité et s'afficherait en rouge.
     const units = await availableUnits(db, p.id, { excludeCartId: cart.id });
 
     lines.push({
+      productId: p.id,
       slug: p.slug,
       name: p.name,
       qty: item.qty,
       unitPriceCents: p.priceCents,
-      lineTotalCents: p.priceCents * item.qty,
+      lineTotalCents: totals.lines[index].lineTotalCents,
       image: p.images[0]?.blobUrl ?? "",
       availableUnits: units,
-      isPreorder,
+      isPreorder: p.availability === "PREORDER",
       preorderShipsAt: p.preorderShipsAt,
     });
   }
@@ -421,11 +440,28 @@ export async function getCartView(db: Tx, token: string): Promise<CartView> {
   return {
     lines,
     itemCount: lines.reduce((n, l) => n + l.qty, 0),
-    subtotalCents: lines.reduce((n, l) => n + l.lineTotalCents, 0),
+    totals,
     // La précommande est exclue : son stock est négatif par construction, ce
     // n'est pas une indisponibilité mais un compteur de flacons dus.
     hasUnavailableLines: lines.some(
       (l) => !l.isPreorder && l.qty > l.availableUnits,
     ),
+  };
+}
+
+/**
+ * Panier vide, forme canonique.
+ *
+ * Une fonction et non une constante partagée : cette vue part chez le client,
+ * et un objet unique traversant toutes les requêtes finirait par être muté par
+ * l'une d'elles. Le jour où `CartView` gagne un champ, le panier vide le gagne
+ * aussi — sans littéral recopié dans trois fichiers.
+ */
+export function emptyCartView(): CartView {
+  return {
+    lines: [],
+    itemCount: 0,
+    totals: computeTotals({ lines: [] }),
+    hasUnavailableLines: false,
   };
 }
