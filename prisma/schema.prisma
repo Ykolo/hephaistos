@@ -260,6 +260,20 @@ model OrderEvent {
   @@index([orderId, createdAt])
 }
 
+/// Compteur de commandes, une ligne par année civile (HEP-52).
+///
+/// Même mécanique que `InvoiceCounter`, pour une raison différente : la facture
+/// exige une série *sans trou*, la commande exige seulement que deux clients
+/// simultanés n'obtiennent jamais le même numéro. Une SEQUENCE Postgres suffirait
+/// à ce second besoin, mais pas à la remise à zéro annuelle : il faudrait créer
+/// une séquence par an, ou la réinitialiser au 1er janvier — course garantie
+/// pendant la seconde de bascule. Une ligne par année règle les deux.
+model OrderCounter {
+  year       Int      @id
+  lastNumber Int      @default(0)
+  updatedAt  DateTime @updatedAt
+}
+
 /// Compteur de facturation, une ligne par exercice.
 ///
 /// Une SEQUENCE Postgres ne convient pas ici : `nextval()` est non
