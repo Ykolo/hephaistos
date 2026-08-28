@@ -191,7 +191,14 @@ export type CartLine = {
   unitPriceCents: number;
   lineTotalCents: number;
   image: string;
-  /** Unités réellement disponibles — pour signaler une ligne devenue invalide. */
+  /**
+   * Unités réellement disponibles.
+   *
+   * Toujours un nombre fini, y compris en précommande — une valeur infinie ne
+   * survivrait pas à la sérialisation vers le client (`Infinity` devient
+   * `null` en JSON). Pour une précommande, se fier à `isPreorder` plutôt qu'à
+   * ce compteur, qui peut être négatif : il représente alors les unités dues.
+   */
   availableUnits: number;
   isPreorder: boolean;
   preorderShipsAt: Date | null;
@@ -252,9 +259,7 @@ export async function getCartView(db: Tx, token: string): Promise<CartView> {
   for (const item of cart.items) {
     const p = item.product;
     const isPreorder = p.availability === "PREORDER";
-    const units = isPreorder
-      ? Number.POSITIVE_INFINITY
-      : await availableUnits(db, p.id);
+    const units = await availableUnits(db, p.id);
 
     lines.push({
       slug: p.slug,
@@ -273,6 +278,10 @@ export async function getCartView(db: Tx, token: string): Promise<CartView> {
     lines,
     itemCount: lines.reduce((n, l) => n + l.qty, 0),
     subtotalCents: lines.reduce((n, l) => n + l.lineTotalCents, 0),
-    hasUnavailableLines: lines.some((l) => l.qty > l.availableUnits),
+    // La précommande est exclue : son stock est négatif par construction, ce
+    // n'est pas une indisponibilité mais un compteur de flacons dus.
+    hasUnavailableLines: lines.some(
+      (l) => !l.isPreorder && l.qty > l.availableUnits,
+    ),
   };
 }

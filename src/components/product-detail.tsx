@@ -8,6 +8,7 @@ import { Reveal } from "@/components/reveal";
 import { NewsletterBand } from "@/components/newsletter-band";
 import { formatPriceCompact, formatPricePer100ml } from "@/lib/format";
 import { preorderNotice } from "@/lib/dates";
+import { AddToCart } from "@/components/add-to-cart";
 import { routes } from "@/lib/routes";
 import type { ProductView } from "@/lib/products";
 
@@ -163,12 +164,13 @@ export function ProductDetail({
                 +
               </button>
             </div>
-            <Link
-              href={routes.newsletter}
-              className="flex h-[54px] flex-1 basis-[220px] items-center justify-center border border-ink bg-ink px-8 text-[11.5px] font-semibold uppercase tracking-[.18em] text-white transition-colors hover:bg-paper hover:text-ink"
-            >
-              Me prévenir au lancement
-            </Link>
+            <AddToCart
+              slug={current.slug}
+              availability={current.availability}
+              availableUnits={current.availableUnits}
+              qty={qty}
+              className="flex-1 basis-[220px]"
+            />
           </div>
           {/*
             Précommande : la date d'expédition s'affiche AVANT le paiement.

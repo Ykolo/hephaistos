@@ -5,6 +5,7 @@ export const routes = {
   histoire: "/histoire",
   vision: "/vision",
   avis: "/avis",
+  cart: "/panier",
   contact: "/contact",
   newsletter: "/newsletter",
   legal: "/legal",
