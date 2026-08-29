@@ -1,5 +1,5 @@
-import { randomBytes } from "node:crypto";
-import type { OrderStatus } from "@/generated/prisma/client";
+import { createHash, randomBytes } from "node:crypto";
+import type { OrderStatus, PrismaClient } from "@/generated/prisma/client";
 import type { Tx } from "../db";
 import { ActionError } from "../errors";
 import { incrementStock } from "./stock";
@@ -13,7 +13,7 @@ import type { Address } from "@/lib/validation/address";
 
 /**
  * Commandes — modèle et création (HEP-52), cycle de vie (HEP-53),
- * annulation (HEP-55).
+ * annulation (HEP-55), idempotence (HEP-54).
  *
  * La règle qui gouverne tout ce fichier : **une commande est un instantané**.
  * Changer un prix, renommer un produit ou l'archiver demain ne doit modifier
@@ -695,4 +695,151 @@ async function releaseDiscount(
   });
 
   return code;
+}
+
+// --- Idempotence (HEP-54) ---------------------------------------------------
+
+/**
+ * Clé d'idempotence d'un panier, **dérivée de son contenu**.
+ *
+ * Volontairement pas un `randomUUID` posé en champ caché : une clé aléatoire
+ * change à chaque rendu de la page, et deux onglets — ou un rechargement
+ * pendant la requête — repartiraient avec deux clés différentes, donc deux
+ * commandes. Dérivée, elle est la même pour un panier identique, et différente
+ * dès qu'une ligne bouge.
+ *
+ * `updatedAt` en fait partie : `touch()` le met à jour à chaque mutation du
+ * panier (HEP-46), ce qui donne gratuitement le « nouvelle clé après toute
+ * modification du panier » de l'issue. Le contenu y figure aussi, pour que la
+ * clé reste lisible en débogage et survive à une horloge qui reculerait.
+ *
+ * Après un paiement réussi le panier est vidé : la commande suivante repart
+ * d'un panier neuf, donc d'une clé neuve.
+ */
+export async function cartIdempotencyKey(tx: Tx, cartToken: string): Promise<string> {
+  const cart = await tx.cart.findUnique({
+    where: { token: cartToken },
+    select: {
+      id: true,
+      updatedAt: true,
+      discountCode: true,
+      items: {
+        orderBy: { productId: "asc" },
+        select: { productId: true, qty: true },
+      },
+    },
+  });
+  if (!cart) throw new ActionError("NOT_FOUND", "Votre panier est vide.");
+
+  const fingerprint = [
+    cart.id,
+    cart.updatedAt.getTime(),
+    cart.discountCode ?? "",
+    ...cart.items.map((i) => `${i.productId}x${i.qty}`),
+  ].join("|");
+
+  return createHash("sha256").update(fingerprint).digest("base64url");
+}
+
+export type PlaceOrderResult = {
+  id: string;
+  number: string;
+  publicToken: string;
+  /**
+   * `true` quand la commande existait déjà pour cette clé.
+   *
+   * L'appelant doit alors **réutiliser** la session Stripe rattachée à cette
+   * commande (HEP-58) au lieu d'en créer une seconde. C'est là que se joue le
+   * « un seul débit » de la definition of done.
+   */
+  replayed: boolean;
+};
+
+/**
+ * Crée la commande **une seule fois** pour une clé donnée.
+ *
+ * L'ordre est celui de l'issue, et il n'est pas interchangeable :
+ *
+ * 1. `INSERT` de la commande — un conflit d'unicité signifie que quelqu'un est
+ *    déjà passé ;
+ * 2. en cas de conflit, on relit la commande existante et on la renvoie ;
+ * 3. c'est seulement ensuite que l'appelant crée la session Stripe, avec la
+ *    même clé en `Idempotency-Key`.
+ *
+ * Créer la session Stripe **avant** l'insertion laisserait deux sessions
+ * ouvertes sur le même panier : la base d'abord, toujours.
+ *
+ * Le bouton désactivé et le témoin de chargement côté client sont du confort.
+ * Ils ne protègent d'aucun cas réel — double-tap avant l'hydratation React,
+ * rechargement pendant la requête, retour arrière puis re-soumission, connexion
+ * instable qui rejoue la requête. La garantie est ici, en base.
+ *
+ * ⚠️ Prend `db` et non `Tx`, contrairement au reste du fichier : un conflit
+ * d'unicité **avorte** la transaction Postgres qui l'a déclenché. La relecture
+ * doit donc se faire en dehors, ce qui suppose de piloter la transaction depuis
+ * l'intérieur de la fonction.
+ */
+export async function placeOrder(
+  db: PrismaClient,
+  input: CreateOrderInput & { idempotencyKey: string },
+): Promise<PlaceOrderResult> {
+  if (!input.idempotencyKey) {
+    throw new ActionError(
+      "VALIDATION",
+      "Impossible de valider cette commande. Rechargez votre panier.",
+    );
+  }
+
+  try {
+    const order = await db.$transaction((tx) => createOrder(tx, input));
+    return { ...order, replayed: false };
+  } catch (error) {
+    if (!isUniqueViolation(error, "idempotencyKey")) throw error;
+
+    // Le second clic. La commande du premier existe : on la rend telle quelle.
+    const existing = await db.order.findUnique({
+      where: { idempotencyKey: input.idempotencyKey },
+      select: { id: true, number: true, publicToken: true },
+    });
+    if (!existing) {
+      // Le conflit portait sur cette clé et la commande reste introuvable : la
+      // base se contredit, et poursuivre créerait le doublon qu'on cherche à
+      // éviter. Mieux vaut échouer bruyamment.
+      throw new ActionError("INTERNAL", "Commande introuvable après conflit.");
+    }
+
+    return { ...existing, replayed: true };
+  }
+}
+
+/**
+ * Reconnaît un conflit d'unicité Prisma sur un champ donné.
+ *
+ * Écrit à la main plutôt qu'avec `instanceof PrismaClientKnownRequestError` :
+ * l'erreur traverse l'adapter et le client généré, et un `instanceof` dépend
+ * alors de l'identité exacte du module chargé — vrai en test, faux en
+ * production, ou l'inverse.
+ *
+ * `meta` n'a **pas** de forme stable. La documentation annonce
+ * `meta.target: string[]`, mais avec un driver adapter (`@prisma/adapter-pg`,
+ * `@prisma/adapter-neon`) `target` est absent et le champ fautif se trouve
+ * sous `meta.driverAdapterError.cause.constraint.fields`, entre guillemets, à
+ * côté du nom de contrainte `Order_idempotencyKey_key`.
+ *
+ * D'où la recherche dans `meta` sérialisé : le nom du champ apparaît dans
+ * toutes ces formes. C'est grossier, mais c'est le seul critère qui survive au
+ * changement d'adapter — et le code `P2002` a déjà fait le tri.
+ */
+function isUniqueViolation(error: unknown, field: string): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const e = error as { code?: unknown; meta?: unknown };
+  if (e.code !== "P2002") return false;
+
+  try {
+    return JSON.stringify(e.meta ?? {}).includes(field);
+  } catch {
+    // `meta` contient une référence circulaire : on préfère ne rien affirmer
+    // plutôt que de traiter à tort un autre conflit comme un rejeu.
+    return false;
+  }
 }
