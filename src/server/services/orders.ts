@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { OrderStatus } from "@/generated/prisma/client";
 import type { Tx } from "../db";
 import { ActionError } from "../errors";
+import { incrementStock } from "./stock";
 import {
   computeTotals,
   type PricingDiscount,
@@ -11,7 +12,8 @@ import {
 import type { Address } from "@/lib/validation/address";
 
 /**
- * Commandes — modèle et création (HEP-52), cycle de vie (HEP-53).
+ * Commandes — modèle et création (HEP-52), cycle de vie (HEP-53),
+ * annulation (HEP-55).
  *
  * La règle qui gouverne tout ce fichier : **une commande est un instantané**.
  * Changer un prix, renommer un produit ou l'archiver demain ne doit modifier
@@ -214,7 +216,7 @@ export async function createOrder(
       orderId: order.id,
       from: null,
       to: "PENDING",
-      actorId: actorId({ kind: "customer" }),
+      actorId: actorIdOf({ kind: "customer" }),
       note: "Commande créée depuis le panier.",
     },
   });
@@ -281,7 +283,7 @@ export type OrderActor =
   /** Webhook Stripe — la seule source de vérité du paiement (HEP-59). */
   | { kind: "stripe" };
 
-function actorId(actor: OrderActor): string {
+function actorIdOf(actor: OrderActor): string {
   switch (actor.kind) {
     case "admin":
       return actor.id;
@@ -433,7 +435,7 @@ export async function transitionOrder(
       orderId: input.orderId,
       from,
       to: input.to,
-      actorId: actorId(input.actor),
+      actorId: actorIdOf(input.actor),
       note: input.note ?? null,
     },
   });
@@ -500,10 +502,197 @@ export async function setInternalNote(
   // vaut souvent plus que la consigne elle-même.
   await tx.auditLog.create({
     data: {
-      actorId: actorId(actor),
+      actorId: actorIdOf(actor),
       entity: "Order",
       entityId: orderId,
       action: "internal-note",
     },
   });
+}
+
+// --- Annulation (HEP-55) ----------------------------------------------------
+
+/**
+ * États depuis lesquels une commande peut encore être annulée.
+ *
+ * Une fois le colis parti, l'annulation n'a plus de sens : le produit est
+ * dehors. C'est le processus de retour qui prend le relais (lot 7), et lui
+ * seul peut décider si le cosmétique ouvert revient en stock ou part au rebut.
+ */
+const CANCELABLE: readonly OrderStatus[] = ["PENDING", "PAID", "PREPARING"];
+
+export type CancelOrderInput = {
+  orderId: string;
+  /**
+   * Motif, **obligatoire**.
+   *
+   * Il part au journal et sert à écrire le mail au client. Une annulation sans
+   * motif est une commande disparue sans explication, côté client comme côté
+   * comptabilité.
+   */
+  reason: string;
+  actor: OrderActor;
+  /**
+   * Remboursement Stripe (lot 5), injecté par l'appelant.
+   *
+   * Le service ne parle pas au réseau lui-même : il resterait intestable et
+   * violerait la règle de `README.md`. La fonction est appelée **avant** que
+   * quoi que ce soit ne soit écrit ; si elle lève, toute la transaction tombe
+   * et la commande n'est pas annulée — c'est la deuxième definition of done.
+   *
+   * ⚠️ Il reste une fenêtre que rien ne peut fermer : le remboursement réussit,
+   * puis le commit échoue. L'argent est rendu, la commande est encore payée.
+   * C'est pourquoi l'appel Stripe doit porter une `Idempotency-Key` dérivée de
+   * la commande (HEP-54) : le rejeu de l'annulation ne rembourse pas deux fois
+   * et rattrape l'état.
+   */
+  refund?: () => Promise<void>;
+};
+
+export type CancelOrderResult = {
+  /** Lignes réellement remises en stock, déjà décomposées pour un coffret. */
+  restocked: { productId: string; qty: number }[];
+  /** Gabarit de mail à envoyer (HEP-66). */
+  email: string | null;
+  /** Code promo rendu à son porteur, le cas échéant. */
+  releasedDiscountCode: string | null;
+};
+
+/**
+ * Annule une commande : l'état, l'argent et le stock, ou rien.
+ *
+ * ⚠️ **À appeler dans un `$transaction`.** C'est la seule chose qui rende
+ * l'atomicité possible : trois écritures dont une seule passerait laisseraient
+ * une commande annulée sans remise en stock, ou l'inverse.
+ */
+export async function cancelOrder(
+  tx: Tx,
+  input: CancelOrderInput,
+): Promise<CancelOrderResult> {
+  const reason = input.reason.trim();
+  if (!reason) {
+    throw new ActionError(
+      "VALIDATION",
+      "Un motif d'annulation est obligatoire.",
+      { reason: "Indiquez la raison de l'annulation." },
+    );
+  }
+
+  const order = await tx.order.findUnique({
+    where: { id: input.orderId },
+    select: { id: true, status: true, discountCode: true, isPreorder: true },
+  });
+  if (!order) throw new ActionError("NOT_FOUND", "Cette commande est introuvable.");
+
+  if (!CANCELABLE.includes(order.status)) {
+    throw new ActionError(
+      "INVALID_TRANSITION",
+      order.status === "SHIPPED" || order.status === "DELIVERED"
+        ? "Cette commande est déjà partie : passez par une demande de retour."
+        : `Une commande ${LABELS[order.status]} ne peut plus être annulée.`,
+    );
+  }
+
+  // Le stock n'est pris qu'à l'encaissement (HEP-59). Une commande jamais
+  // payée n'a rien consommé, et lui « rendre » son stock inventerait des
+  // flacons — l'erreur qui fait dériver l'inventaire sans que rien n'alerte.
+  const paid = order.status !== "PENDING";
+
+  if (paid && !input.refund) {
+    throw new ActionError(
+      "VALIDATION",
+      "Cette commande est payée : elle ne peut pas être annulée sans remboursement.",
+    );
+  }
+
+  // L'argent d'abord. Rembourser après avoir écrit l'annulation reviendrait à
+  // annuler en base une commande dont le client n'a jamais revu l'argent.
+  if (input.refund) await input.refund();
+
+  const restocked = await restockFromSaleMovements(tx, order.id, input.actor, reason);
+  const releasedDiscountCode = await releaseDiscount(tx, order.id, order.discountCode);
+
+  const { email } = await transitionOrder(tx, {
+    orderId: order.id,
+    to: "CANCELED",
+    actor: input.actor,
+    note: reason,
+  });
+
+  return { restocked, email, releasedDiscountCode };
+}
+
+/**
+ * Rend exactement ce qui a été pris.
+ *
+ * La remise en stock est reconstruite depuis les mouvements `SALE` de la
+ * commande, et non depuis ses lignes : un coffret y figure déjà décomposé en
+ * composants, et la composition a pu changer depuis la vente. Repartir des
+ * lignes rendrait la composition d'aujourd'hui pour une vente d'hier.
+ *
+ * Une commande sans mouvement `SALE` — jamais payée — ne rend rien.
+ */
+async function restockFromSaleMovements(
+  tx: Tx,
+  orderId: string,
+  actor: OrderActor,
+  reason: string,
+): Promise<{ productId: string; qty: number }[]> {
+  const sales = await tx.stockMovement.findMany({
+    where: { orderId, reason: "SALE" },
+    select: { productId: true, delta: true },
+  });
+
+  // Regroupé par produit : une commande peut porter deux lignes du même
+  // composant — un sérum seul plus un coffret qui en contient un.
+  const byProduct = new Map<string, number>();
+  for (const sale of sales) {
+    byProduct.set(sale.productId, (byProduct.get(sale.productId) ?? 0) - sale.delta);
+  }
+
+  const restocked: { productId: string; qty: number }[] = [];
+  // Trié comme à la vente : c'est ce qui garde l'ordre des verrous de ligne
+  // constant et évite les interblocages entre deux annulations simultanées.
+  for (const [productId, qty] of [...byProduct].sort((a, b) => a[0].localeCompare(b[0]))) {
+    if (qty <= 0) continue;
+    // `incrementStock` et non `restockProduct` : les mouvements de vente sont
+    // déjà au niveau du composant, les redécomposer les multiplierait.
+    await incrementStock(tx, {
+      productId,
+      qty,
+      reason: "CANCEL",
+      orderId,
+      actorId: actorIdOf(actor),
+      note: `Annulation : ${reason}`,
+    });
+    restocked.push({ productId, qty });
+  }
+
+  return restocked;
+}
+
+/**
+ * Rend le code promo à son porteur.
+ *
+ * Sans cette restitution, un client dont la commande est annulée par la
+ * boutique perd son code — et c'est lui qui écrit au service client.
+ */
+async function releaseDiscount(
+  tx: Tx,
+  orderId: string,
+  code: string | null,
+): Promise<string | null> {
+  if (!code) return null;
+
+  const { count } = await tx.discountRedemption.deleteMany({ where: { orderId } });
+  if (count === 0) return null;
+
+  // Décrément conditionné : le compteur ne doit pas passer sous zéro si une
+  // reprise de données l'a désynchronisé des utilisations réelles.
+  await tx.discount.updateMany({
+    where: { code, usedCount: { gte: count } },
+    data: { usedCount: { decrement: count } },
+  });
+
+  return code;
 }
