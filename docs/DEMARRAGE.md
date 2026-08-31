@@ -143,16 +143,23 @@ Pages disponibles : `/admin/produits`, `/admin/produits/[slug]`, `/admin/lots`,
 
 ## Le cron des réservations
 
-`GET /api/cron/reservations` libère les réservations de stock expirées
-(HEP-48). Il est signé par `CRON_SECRET` et **refuse de fonctionner en
-production** si le secret est absent : sans lui, n'importe qui pourrait le
-déclencher en boucle et vider le panier de clients en cours d'achat.
+`GET /api/cron/reservations` (HEP-48). Il est signé par `CRON_SECRET` et
+**refuse de fonctionner en production** si le secret est absent : sans lui,
+n'importe qui pourrait le déclencher en boucle et vider le panier de clients en
+cours d'achat. En local, la route répond sans secret.
 
-En local, la route répond sans secret.
+**Aucun cron ne l'appelle aujourd'hui, et ce n'est pas un oubli.** Contrairement
+à ce que son nom suggère, cette route **ne libère aucun stock** : la
+disponibilité se calcule avec `reservedUntil > NOW()`, donc une réservation
+échue cesse de bloquer à la seconde près, sans que rien ne tourne. La route ne
+fait que tenir l'historique — poser le mouvement `RELEASE` en face du `RESERVE`.
+
+Ne pas l'appeler ne casse donc rien de visible. Voir `vercel.ts` et le
+quatrième piège ci-dessous.
 
 ## Les pièges du projet
 
-Trois choses coûtent des heures quand on ne les sait pas.
+Quatre choses coûtent des heures quand on ne les sait pas.
 
 ### `cacheComponents` et le layout racine
 
@@ -184,6 +191,23 @@ documentée de l'erreur de contrainte unique **est absente**. Le champ fautif
 vit sous `meta.driverAdapterError.cause.constraint.fields`, entre guillemets.
 Détecter un conflit en lisant `meta.target` échoue silencieusement — voir
 `isUniqueViolation` dans `src/server/services/orders.ts`.
+
+### Un cron trop fréquent fait échouer le déploiement
+
+Sur le plan **Hobby**, un cron Vercel ne peut tourner qu'**une fois par jour**.
+Une expression plus fréquente ne dégrade pas le cron : elle fait échouer le
+**déploiement entier**, avec « Hobby accounts are limited to daily cron jobs ».
+
+Le `*/5 * * * *` déclaré en HEP-48 a bloqué **quatorze commits d'affilée** sans
+que personne ne le voie — rien ne le signale à part une croix sur le commit et
+un site de production qui cesse discrètement de suivre `main`.
+
+Avant de déclarer un `crons` dans `vercel.ts`, vérifier le plan du compte. Et
+après un merge, vérifier que le déploiement est bien parti :
+
+```bash
+gh api repos/Ykolo/hephaistos/commits/main/status --jq '.state'
+```
 
 ## Structure
 
