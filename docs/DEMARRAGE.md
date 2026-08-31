@@ -148,14 +148,18 @@ Pages disponibles : `/admin/produits`, `/admin/produits/[slug]`, `/admin/lots`,
 n'importe qui pourrait le déclencher en boucle et vider le panier de clients en
 cours d'achat. En local, la route répond sans secret.
 
-**Aucun cron ne l'appelle aujourd'hui, et ce n'est pas un oubli.** Contrairement
-à ce que son nom suggère, cette route **ne libère aucun stock** : la
-disponibilité se calcule avec `reservedUntil > NOW()`, donc une réservation
-échue cesse de bloquer à la seconde près, sans que rien ne tourne. La route ne
-fait que tenir l'historique — poser le mouvement `RELEASE` en face du `RESERVE`.
+**Un cron Vercel l'appelle une fois par jour**, à 4 h — et pas davantage, pour
+la raison exposée au quatrième piège ci-dessous.
 
-Ne pas l'appeler ne casse donc rien de visible. Voir `vercel.ts` et le
-quatrième piège ci-dessous.
+Le quotidien suffit, et ce n'est pas un pis-aller. Contrairement à ce que son
+nom suggère, cette route **ne libère aucun stock** : la disponibilité se calcule
+avec `reservedUntil > NOW()`, donc une réservation échue cesse de bloquer à la
+seconde près, sans que rien ne tourne. La route ne fait que tenir l'historique —
+poser le mouvement `RELEASE` en face du `RESERVE`. Un journal d'audit n'a pas
+besoin d'être écrit à la minute.
+
+Les crons ne s'exécutent que sur les déploiements de **production** ; en preview
+la route existe mais rien ne la déclenche.
 
 ## Les pièges du projet
 
@@ -202,8 +206,9 @@ Le `*/5 * * * *` déclaré en HEP-48 a bloqué **quatorze commits d'affilée** s
 que personne ne le voie — rien ne le signale à part une croix sur le commit et
 un site de production qui cesse discrètement de suivre `main`.
 
-Avant de déclarer un `crons` dans `vercel.ts`, vérifier le plan du compte. Et
-après un merge, vérifier que le déploiement est bien parti :
+Le cron est aujourd'hui déclaré en `0 4 * * *`, ce que Hobby accepte. Avant de
+resserrer cette cadence, vérifier le plan du compte. Et après un merge, vérifier
+que le déploiement est bien parti :
 
 ```bash
 gh api repos/Ykolo/hephaistos/commits/main/status --jq '.state'
