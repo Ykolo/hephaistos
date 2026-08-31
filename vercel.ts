@@ -19,14 +19,23 @@ export const config: VercelConfig = {
    */
   regions: ["cdg1"],
 
-  /**
-   * Libération des réservations de stock échues (HEP-48).
-   *
-   * Toutes les 5 minutes : la definition of done exige qu'un panier abandonné
-   * rende son stock en moins de 35 minutes, soit 30 de réservation plus une
-   * marge de passage du cron.
-   */
-  crons: [{ path: "/api/cron/reservations", schedule: "*/5 * * * *" }],
+  // PAS de `crons` ici, et c'est délibéré.
+  //
+  // Un `*/5 * * * *` a été déclaré en HEP-48 puis retiré : **sur le plan Hobby,
+  // un cron ne peut tourner qu'une fois par jour**, et une expression plus
+  // fréquente fait échouer le DÉPLOIEMENT — pas seulement le cron. Quatorze
+  // commits sont partis en échec avant qu'on s'en aperçoive, parce que rien ne
+  // le signale à part une croix sur le commit.
+  //
+  // Ce n'est pas grave sur le fond : `/api/cron/reservations` ne libère aucun
+  // stock. La disponibilité se calcule avec `reservedUntil > NOW()`
+  // (`reservedQty`, HEP-48), donc une réservation échue cesse de bloquer à la
+  // seconde près, sans que rien ne tourne. La route ne fait que l'écriture
+  // d'historique : remettre `reservedUntil` à null et poser le mouvement
+  // `RELEASE` en face du `RESERVE`.
+  //
+  // Elle reste appelable de l'extérieur, protégée par CRON_SECRET. Avant de
+  // redéclarer un cron ici, vérifier le plan du compte.
 
   headers: [
     {
