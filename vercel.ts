@@ -19,23 +19,31 @@ export const config: VercelConfig = {
    */
   regions: ["cdg1"],
 
-  // PAS de `crons` ici, et c'est délibéré.
-  //
-  // Un `*/5 * * * *` a été déclaré en HEP-48 puis retiré : **sur le plan Hobby,
-  // un cron ne peut tourner qu'une fois par jour**, et une expression plus
-  // fréquente fait échouer le DÉPLOIEMENT — pas seulement le cron. Quatorze
-  // commits sont partis en échec avant qu'on s'en aperçoive, parce que rien ne
-  // le signale à part une croix sur le commit.
-  //
-  // Ce n'est pas grave sur le fond : `/api/cron/reservations` ne libère aucun
-  // stock. La disponibilité se calcule avec `reservedUntil > NOW()`
-  // (`reservedQty`, HEP-48), donc une réservation échue cesse de bloquer à la
-  // seconde près, sans que rien ne tourne. La route ne fait que l'écriture
-  // d'historique : remettre `reservedUntil` à null et poser le mouvement
-  // `RELEASE` en face du `RESERVE`.
-  //
-  // Elle reste appelable de l'extérieur, protégée par CRON_SECRET. Avant de
-  // redéclarer un cron ici, vérifier le plan du compte.
+  /**
+   * Ménage des réservations de stock échues (HEP-48).
+   *
+   * ⚠️ **Une fois par jour, et pas davantage.** Sur le plan Hobby, un cron ne
+   * peut tourner qu'une fois par jour ; une expression plus fréquente ne
+   * dégrade pas le cron, elle fait échouer le **déploiement entier**. Le
+   * « toutes les 5 minutes » posé en HEP-48 a bloqué quatorze commits
+   * d'affilée sans que personne ne le voie — rien ne le signale à part une
+   * croix sur le commit. Avant de toucher à cette cadence, vérifier le plan
+   * du compte.
+   *
+   * Le quotidien suffit, et ce n'est pas un pis-aller : cette route **ne
+   * libère aucun stock**. La disponibilité se calcule avec
+   * `reservedUntil > NOW()` (`reservedQty`), donc une réservation échue cesse
+   * de bloquer à la seconde près, sans que rien ne tourne. La definition of
+   * done de HEP-48 — « un panier abandonné rend son stock en moins de 35
+   * minutes » — est tenue par la requête, pas par le cron. Ce dernier ne fait
+   * que tenir l'historique : remettre `reservedUntil` à null et poser le
+   * mouvement `RELEASE` en face du `RESERVE`. Un journal d'audit n'a pas
+   * besoin d'être écrit à la minute.
+   *
+   * 4 h du matin : le creux de trafic. Sur Hobby, la précision est de ±59 min,
+   * ce qui est sans importance ici.
+   */
+  crons: [{ path: "/api/cron/reservations", schedule: "0 4 * * *" }],
 
   headers: [
     {
