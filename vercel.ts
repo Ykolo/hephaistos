@@ -1,5 +1,25 @@
 import type { VercelConfig } from "@vercel/config/v1";
 
+/** Préfixe des réécritures posées par `withBotId` (cf. `next.config.ts`). */
+const BOTID_PREFIX = "149e9513-01fa-4fb0-aad4-566afd725d1b";
+
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://vercel.live",
+  "style-src 'self' 'unsafe-inline'",
+  // Images produit servies par Vercel Blob, et par Shopify tant que la
+  // migration d'images n'est pas terminée (cf. `next.config.ts`).
+  "img-src 'self' data: blob: https://*.public.blob.vercel-storage.com https://hephaistosparis.com",
+  "font-src 'self'",
+  // vercel.live : barre d'outils Vercel, présente sur les previews.
+  "connect-src 'self' https://vercel.live",
+  "frame-src https://vercel.live",
+  "frame-ancestors 'none'",
+  "form-action 'self' https://checkout.stripe.com",
+  "base-uri 'self'",
+  "object-src 'none'",
+].join("; ");
+
 /**
  * Configuration de déploiement Héphaïstos (HEP-32).
  *
@@ -67,6 +87,52 @@ export const config: VercelConfig = {
   headers: [
     {
       /**
+       * En-têtes de sécurité (HEP-35), sur tout le site sauf le relais BotID :
+       * celui-ci pose son propre `X-Frame-Options: SAMEORIGIN`, et deux
+       * valeurs contradictoires du même en-tête sont ignorées par certains
+       * navigateurs — on perdrait la protection au lieu de la renforcer.
+       */
+      source: `/((?!${BOTID_PREFIX}).*)`,
+      headers: [
+        /**
+         * Deux ans, sous-domaines compris. Pas de `preload` : l'inscription
+         * dans la liste des navigateurs est quasi irréversible, et le domaine
+         * de la marque sert encore la boutique Shopify. À reconsidérer après
+         * la bascule (HEP-87).
+         */
+        { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        { key: "X-Frame-Options", value: "DENY" },
+        /**
+         * Aucune API sensible du navigateur n'est utilisée. La géolocalisation
+         * reste ouverte au site lui-même pour le choix du point relais
+         * (HEP-71).
+         */
+        {
+          key: "Permissions-Policy",
+          value: "camera=(), microphone=(), payment=(), usb=(), geolocation=(self)",
+        },
+        /**
+         * CSP en **observation seulement** : elle signale sans rien bloquer.
+         * Elle sera durcie et passée en `Content-Security-Policy` une fois
+         * Sentry (HEP-38) et le tunnel Stripe (HEP-58) inventoriés — une CSP
+         * bloquante posée trop tôt casse le paiement sans prévenir.
+         *
+         * Stripe Checkout est hébergé : le client quitte le site pour payer,
+         * il n'y a donc aucune iframe Stripe à autoriser. Seul `form-action`
+         * doit laisser partir la redirection.
+         *
+         * `'unsafe-inline'` sur les scripts : Next.js injecte ses données
+         * d'hydratation en ligne. S'en passer demande un nonce par requête,
+         * donc un rendu 100 % dynamique — incompatible avec le catalogue mis
+         * en cache (HEP-45).
+         */
+        { key: "Content-Security-Policy-Report-Only", value: CSP },
+      ],
+    },
+    {
+      /**
        * Aucune preview ne doit être indexée : une URL de préproduction qui
        * remonte dans Google affiche des prix faux et du contenu de test sous
        * le nom de la marque. Vercel Authentication bloque déjà l'accès ; cet
@@ -90,9 +156,6 @@ export const config: VercelConfig = {
   // posée au hasard ici produirait soit une boucle de redirection, soit un
   // changement d'URL après indexation. À arbitrer avec Jules, puis à déclarer
   // dans les réglages de domaine du projet Vercel.
-  //
-  // Les en-têtes de sécurité (CSP, HSTS, X-Frame-Options) relèvent de HEP-35
-  // et sont volontairement absents ici pour ne pas être posés à moitié.
 };
 
 export default config;

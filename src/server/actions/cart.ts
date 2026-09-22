@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { action } from "../action";
+import { RATE_LIMITS } from "../ratelimit";
 import { db } from "../db";
 import { readCartToken, requireCartToken } from "../cart-session";
 import type { CartView } from "../services/cart";
@@ -61,7 +62,7 @@ export const addToCart = action(
     revalidateCart();
     return getCartView(db, token);
   },
-  { name: "cart.add", rateLimit: { limit: 60, windowSeconds: 60, by: "session" } },
+  { name: "cart.add", rateLimit: RATE_LIMITS.cart },
 );
 
 export const setCartQty = action(
