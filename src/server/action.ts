@@ -7,6 +7,7 @@ import {
 } from "./errors";
 import { readCartToken } from "./cart-session";
 import { currentIpHash } from "./ip";
+import { captureError } from "./observability";
 import { consumeRateLimit, type RateLimitRule } from "./ratelimit";
 
 /**
@@ -80,13 +81,9 @@ async function isBot(): Promise<boolean> {
   return verdict.isBot;
 }
 
-/**
- * Point d'ancrage de la capture d'erreur. Sentry arrive en HEP-38 ; en
- * attendant, on écrit sur la sortie d'erreur pour ne rien perdre en local.
- */
+/** Sentry (HEP-38), étiqueté par action pour pouvoir filtrer. */
 function captureException(error: unknown, ctx: ActionContext): void {
-  // TODO(HEP-38) : Sentry.captureException(error, { tags: { action: ctx.name } })
-  console.error(`[action:${ctx.name}]`, error);
+  captureError(error, { action: ctx.name });
 }
 
 /** Aplatit les erreurs Zod en `{ champ: message }` pour l'affichage. */

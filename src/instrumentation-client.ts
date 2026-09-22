@@ -1,4 +1,6 @@
+import * as Sentry from "@sentry/nextjs";
 import { initBotId } from "botid/client/core";
+import { sharedSentryOptions } from "@/lib/sentry-scrub";
 
 /**
  * Pages dont les formulaires sont protégés par Vercel BotID (HEP-35).
@@ -14,3 +16,12 @@ import { initBotId } from "botid/client/core";
 initBotId({
   protect: [{ path: "/contact", method: "POST" }],
 });
+
+/**
+ * Sentry côté navigateur (HEP-38). Pas de Session Replay : il enregistrerait
+ * les saisies du tunnel d'achat, adresses comprises.
+ */
+Sentry.init(sharedSentryOptions);
+
+/** Trace les navigations côté client (changements de page sans rechargement). */
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

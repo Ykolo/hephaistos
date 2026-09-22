@@ -1,5 +1,6 @@
 import { db } from "@/server/db";
 import { releaseExpiredReservations } from "@/server/services/cart";
+import { captureCritical } from "@/server/observability";
 
 /**
  * Libération des réservations de stock échues (HEP-48).
@@ -53,9 +54,8 @@ export async function GET(request: Request) {
       at: new Date().toISOString(),
     });
   } catch (error) {
-    // TODO(HEP-38) : Sentry. Un cron muet qui échoue est pire qu'absent —
-    // le stock se bloquerait sans que personne ne le sache.
-    console.error("[cron.reservations]", error);
+    // Un cron muet qui échoue est pire qu'absent : canal d'alerte dédié.
+    captureCritical("cron", error, { cron: "reservations" });
     return Response.json(
       { ok: false, error: "La libération a échoué." },
       { status: 500 },
