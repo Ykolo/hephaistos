@@ -3,6 +3,7 @@
 import { contactSchema } from "@/lib/validation/contact";
 import { ActionError } from "../errors";
 import { formAction } from "../action";
+import { RATE_LIMITS } from "../ratelimit";
 
 /**
  * Envoi du formulaire de contact.
@@ -11,8 +12,8 @@ import { formAction } from "../action";
  * messages français, erreurs rendues au bon champ, contrat de retour unique.
  *
  * ⚠️ Le message n'est **pas encore persisté**. Le stockage dans `Message`, la
- * notification par Resend et l'anti-spam Vercel BotID sont le contenu de
- * HEP-89 ; tant qu'il n'est pas fait, ce formulaire valide correctement mais
+ * notification par Resend sont le contenu de HEP-89 (BotID, le quota et le
+ * piège à robots sont en place depuis HEP-35) ; tant qu'il n'est pas fait, ce formulaire valide correctement mais
  * n'achemine rien. Il ne doit pas partir en production dans cet état.
  */
 export const submitContact = formAction(
@@ -30,6 +31,7 @@ export const submitContact = formAction(
   },
   {
     name: "contact.submit",
-    rateLimit: { limit: 3, windowSeconds: 600, by: "ip" },
+    rateLimit: RATE_LIMITS.contact,
+    botProtection: true,
   },
 );
