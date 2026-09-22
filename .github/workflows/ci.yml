@@ -1,0 +1,89 @@
+# Intégration continue (HEP-37).
+#
+# Une PR ne se fusionne que si ce workflow est vert : lint, types, migrations,
+# tests et build. Le verrou lui-même (« status check requis ») se pose dans les
+# réglages de protection de `main` sur GitHub — ce fichier ne fait que produire
+# le verdict.
+#
+# Tout tourne contre un Postgres jetable, jamais contre Neon : les tests
+# écrivent et suppriment des données (cf. `tests/helpers/db.ts`, qui refuse
+# une URL Neon).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Un nouveau push sur la même PR annule le run précédent : inutile de payer
+# deux fois pour un commit déjà dépassé.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, types, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        # Même majeure que `bun run db:local:up`.
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: hep
+          POSTGRES_PASSWORD: hep
+          POSTGRES_DB: hephaistos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hep -d hephaistos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://hep:hep@localhost:5432/hephaistos
+      DIRECT_URL: postgresql://hep:hep@localhost:5432/hephaistos
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      # Next collecte des statistiques d'usage par défaut ; une CI n'a rien à
+      # leur apprendre.
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4"
+
+      - name: Installation (lockfile figé)
+        # `--frozen-lockfile` : une dépendance qui dérive sans passer par
+        # `bun.lock` doit casser la CI, pas s'installer en silence.
+        run: bun install --frozen-lockfile
+
+      - name: Client Prisma
+        run: bun run db:generate
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Types
+        run: bun run typecheck
+
+      - name: Migrations
+        # `migrate deploy`, comme en production : on vérifie que l'historique
+        # s'applique sur une base vierge, pas seulement qu'il compile.
+        run: bun run db:deploy
+
+      - name: Seed
+        run: bun run db:seed
+
+      - name: Tests
+        run: bun run test
+
+      - name: Build
+        # Le build lit le catalogue en base (`use cache`, HEP-45) : il a besoin
+        # des migrations et du seed ci-dessus.
+        run: bun run build
