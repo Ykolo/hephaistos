@@ -10,7 +10,26 @@ import type { VercelConfig } from "@vercel/config/v1";
  */
 export const config: VercelConfig = {
   framework: "nextjs",
-  buildCommand: "bun run build",
+
+  /**
+   * Les migrations passent **avant** le build, dans la même commande (HEP-37).
+   *
+   * Vercel ne bascule le trafic qu'une fois le build terminé : la base est
+   * donc migrée avant que le nouveau code ne reçoive la moindre requête. Si
+   * la migration échoue, le build s'arrête et l'ancien déploiement reste en
+   * ligne.
+   *
+   * ⚠️ L'inverse n'est pas vrai : si le build échoue *après* une migration
+   * réussie, la base est en avance sur le code servi. Et `vercel rollback`
+   * ne remet jamais la base en arrière. D'où la règle, détaillée dans
+   * `docs/RUNBOOK-deploiement.md` : toute migration doit rester compatible
+   * avec le code **précédent**. Une suppression de colonne se fait en deux
+   * déploiements.
+   *
+   * Ne s'exécute que sur Vercel : un `bun run build` local ne touche jamais
+   * à une base.
+   */
+  buildCommand: "bun run db:deploy && bun run build",
 
   /**
    * Fonctions à Paris. La marque est française, la base est en `eu-central-1`
