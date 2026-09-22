@@ -10,10 +10,12 @@
 # une URL Neon).
 name: CI
 
+# Sur chaque push, toutes branches confondues : le verdict est attaché au
+# commit, donc visible sur la PR dès son ouverture — et disponible avant même
+# qu'elle existe. Pas de déclencheur `pull_request` en plus : il referait le
+# même travail une seconde fois sur chaque commit.
 on:
-  pull_request:
   push:
-    branches: [main]
 
 # Un nouveau push sur la même PR annule le run précédent : inutile de payer
 # deux fois pour un commit déjà dépassé.
