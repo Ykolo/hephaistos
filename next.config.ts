@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { withBotId } from "botid/next/config";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
@@ -31,4 +32,20 @@ const nextConfig: NextConfig = {
 // BotID (HEP-35) : ajoute les réécritures qui relaient le défi invisible vers
 // Vercel depuis notre propre domaine. Leur préfixe est exclu des en-têtes de
 // sécurité globaux dans `vercel.ts`.
-export default withBotId(nextConfig);
+//
+// Sentry (HEP-38) : envoi des source maps au build, pour lire les erreurs
+// navigateur dans le code source plutôt que dans le bundle minifié. Sans
+// SENTRY_AUTH_TOKEN (local, CI), l'envoi est simplement sauté.
+export default withSentryConfig(withBotId(nextConfig), {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  // Les source maps partent chez Sentry puis sont retirées du déploiement :
+  // publiées, elles livreraient le code source à n'importe quel visiteur.
+  sourcemaps: { deleteSourcemapsAfterUpload: true },
+  // Les événements du navigateur passent par notre domaine : les bloqueurs
+  // de publicité ne les coupent pas, et la CSP n'a rien à autoriser.
+  tunnelRoute: "/monitoring",
+});
