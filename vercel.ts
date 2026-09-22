@@ -1,25 +1,5 @@
 import type { VercelConfig } from "@vercel/config/v1";
 
-/** Préfixe des réécritures posées par `withBotId` (cf. `next.config.ts`). */
-const BOTID_PREFIX = "149e9513-01fa-4fb0-aad4-566afd725d1b";
-
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://vercel.live",
-  "style-src 'self' 'unsafe-inline'",
-  // Images produit servies par Vercel Blob, et par Shopify tant que la
-  // migration d'images n'est pas terminée (cf. `next.config.ts`).
-  "img-src 'self' data: blob: https://*.public.blob.vercel-storage.com https://hephaistosparis.com",
-  "font-src 'self'",
-  // vercel.live : barre d'outils Vercel, présente sur les previews.
-  "connect-src 'self' https://vercel.live",
-  "frame-src https://vercel.live",
-  "frame-ancestors 'none'",
-  "form-action 'self' https://checkout.stripe.com",
-  "base-uri 'self'",
-  "object-src 'none'",
-].join("; ");
-
 /**
  * Configuration de déploiement Héphaïstos (HEP-32).
  *
@@ -91,8 +71,14 @@ export const config: VercelConfig = {
        * celui-ci pose son propre `X-Frame-Options: SAMEORIGIN`, et deux
        * valeurs contradictoires du même en-tête sont ignorées par certains
        * navigateurs — on perdrait la protection au lieu de la renforcer.
+       *
+       * ⚠️ Chaîne littérale, et non un gabarit reprenant une constante :
+       * Vercel **lit ce fichier sans l'exécuter**. Toute valeur calculée est
+       * vue comme absente, et le déploiement échoue sur
+       * « `headers[0]` missing required property `source` ». Le préfixe est
+       * celui de `withBotId` (cf. `next.config.ts`).
        */
-      source: `/((?!${BOTID_PREFIX}).*)`,
+      source: "/((?!149e9513-01fa-4fb0-aad4-566afd725d1b).*)",
       headers: [
         /**
          * Deux ans, sous-domaines compris. Pas de `preload` : l'inscription
@@ -127,8 +113,19 @@ export const config: VercelConfig = {
          * d'hydratation en ligne. S'en passer demande un nonce par requête,
          * donc un rendu 100 % dynamique — incompatible avec le catalogue mis
          * en cache (HEP-45).
+         *
+         * `img-src` couvre Vercel Blob, et Shopify tant que la migration des
+         * images n'est pas passée en production (HEP-23). `vercel.live` est
+         * la barre d'outils des previews.
+         *
+         * Écrite d'un bloc, pour la même raison que `source` ci-dessus : une
+         * valeur assemblée en JavaScript ne serait pas lue.
          */
-        { key: "Content-Security-Policy-Report-Only", value: CSP },
+        {
+          key: "Content-Security-Policy-Report-Only",
+          value:
+            "default-src 'self'; script-src 'self' 'unsafe-inline' https://vercel.live; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.public.blob.vercel-storage.com https://hephaistosparis.com; font-src 'self'; connect-src 'self' https://vercel.live; frame-src https://vercel.live; frame-ancestors 'none'; form-action 'self' https://checkout.stripe.com; base-uri 'self'; object-src 'none'",
+        },
       ],
     },
     {
