@@ -21,6 +21,7 @@ Guide non technique de l'administration d'Héphaïstos.
 
 | Écran               | À quoi il sert                                     |
 | ------------------- | -------------------------------------------------- |
+| **Commandes**       | La pile du jour, retrouver une commande, la traiter |
 | **Produits**        | Voir la liste, ouvrir une fiche                     |
 | **Fiche produit**   | Tout modifier : prix, textes, photos, mise en vente |
 | **Lots**            | Enregistrer une réception de marchandise            |
@@ -156,8 +157,47 @@ fiche produit. Une fois par franchissement, pas à chaque commande.
 
 ## Les commandes
 
-L'écran de gestion des commandes **n'existe pas encore**. Le moteur, lui, est
-en place et testé : voici comment il se comportera.
+### La liste
+
+C'est l'écran à ouvrir le matin. Quatre raccourcis en haut, avec leur compteur :
+
+- **À expédier** — la pile de travail du jour : les commandes payées qui ne
+  sont pas encore parties, **la plus ancienne en premier**. Une précommande n'y
+  apparaît qu'à partir de sa date d'envoi annoncée : une précommande pour le
+  15 novembre n'a rien à faire dans la pile du 2 octobre.
+- **En attente de paiement** — commandes créées mais pas encore payées.
+- **Précommandes** — payées, qui attendent leur marchandise.
+- **Du jour** — tout ce qui est arrivé depuis minuit (heure de Paris).
+
+La **recherche** accepte un numéro (`HF-2026-0042`), un nom, un prénom, un bout
+d'email — ou plusieurs mots à la fois : « jules forgeron » trouve Jules
+Forgeron sans ramener tous les Jules. Elle se combine avec l'état et une plage
+de dates. Une recherche est une adresse web : on peut la mettre en favori.
+
+### La fiche d'une commande
+
+Tout ce qu'il faut pour répondre à un client au téléphone **sans ouvrir
+Stripe** : les articles tels qu'ils ont été achetés (prix et noms figés, même
+si le catalogue a changé depuis), les adresses, le paiement avec un lien direct
+vers Stripe, les colis, et le **journal** — qui a changé quoi, quand, et
+pourquoi.
+
+À droite, les actions :
+
+- **Changer d'état** — en préparation, expédiée, livrée. Le menu ne propose
+  que les étapes possibles. La case « note » finit dans le journal : c'est
+  l'endroit pour le numéro de suivi. **« Payée » ne se pose jamais à la main** :
+  seul Stripe peut dire qu'un paiement est arrivé.
+- **Note interne** — ton carnet sur la commande (« client rappelé, accepte un
+  envoi lundi »). Jamais visible du client.
+- **Annuler** — avec un motif obligatoire. Aujourd'hui, seule une commande
+  **non payée** peut être annulée d'ici : annuler une commande payée exige de
+  rembourser, et le remboursement depuis le back-office arrive avec le
+  branchement de Stripe.
+- **Bon de préparation** — la feuille à imprimer et poser à côté du carton :
+  articles, quantités, case à cocher, colonne « lot » à remplir à la main.
+  **Aucun prix dessus** : elle finit souvent dans le colis, et un cadeau ne doit
+  pas arriver avec sa facture.
 
 ### Les étapes d'une commande
 
@@ -203,7 +243,7 @@ n'apporte rien et use sa boîte mail.
 
 - **La connexion sécurisée** — mot de passe, double authentification, journal
   d'activité. C'est ce qui débloquera l'accès depuis internet.
-- **L'écran des commandes** — liste, recherche, fiche détail, bouton d'annulation.
+- **Le remboursement depuis la fiche commande** — il arrive avec Stripe.
 - **Le paiement** — le compte Stripe doit être ouvert (dossier société, réseau
   Cartes Bancaires).
 - **Les mails** — le moteur sait *quel* mail envoyer, mais rien n'est encore
