@@ -228,6 +228,9 @@ model Order {
   @@index([email, createdAt])
   @@index([status, createdAt])
   @@index([userId])
+  // Liste admin sans filtre, triée par date (HEP-56). Les deux index composés
+  // ci-dessus ne servent que si `email` ou `status` est fixé.
+  @@index([createdAt])
 }
 
 /// Snapshot obligatoire : un prix modifié demain ne doit pas altérer les
