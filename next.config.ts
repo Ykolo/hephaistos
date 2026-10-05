@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withBotId } from "botid/next/config";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
@@ -27,4 +28,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// BotID (HEP-35) : ajoute les réécritures qui relaient le défi invisible vers
+// Vercel depuis notre propre domaine. Leur préfixe est exclu des en-têtes de
+// sécurité globaux dans `vercel.ts`.
+export default withBotId(nextConfig);

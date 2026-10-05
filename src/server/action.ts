@@ -5,11 +5,14 @@ import {
   type ActionResult,
   type ErrorCode,
 } from "./errors";
+import { readCartToken } from "./cart-session";
+import { currentIpHash } from "./ip";
+import { consumeRateLimit, type RateLimitRule } from "./ratelimit";
 
 /**
  * Enveloppe unique des Server Actions (HEP-34).
  *
- *   parse Zod → rate limit → exécution → capture Sentry
+ *   parse Zod → BotID → rate limit → exécution → capture Sentry
  *
  * Tout passe par ici. Une action qui valide « à la main » finira tôt ou tard
  * par accepter une entrée non vérifiée : la validation côté client n'est
@@ -26,32 +29,55 @@ export type ActionContext = {
   name: string;
 };
 
-type RateLimitRule = {
-  /** Nombre d'exécutions autorisées par `windowSeconds`. */
-  limit: number;
-  windowSeconds: number;
-  /** Clé d'isolement : IP, email, identifiant de panier… */
-  by: "ip" | "session";
-};
-
 type ActionOptions = {
   name: string;
+  /** Quota — de préférence un préréglage de `RATE_LIMITS`. */
   rateLimit?: RateLimitRule;
+  /**
+   * Vérification Vercel BotID (HEP-35). À activer sur tout formulaire public
+   * qui écrit en base ou envoie un email. ⚠️ La page qui porte le formulaire
+   * doit aussi figurer dans `src/instrumentation-client.ts`, sinon le
+   * navigateur n'envoie pas le jeton et chaque visiteur passe pour un robot.
+   */
+  botProtection?: boolean;
 };
 
 /**
- * Point d'ancrage du rate limiting. Upstash n'est pas encore provisionné
- * (HEP-35) : tant qu'il ne l'est pas, cette fonction laisse passer. Elle
- * existe déjà pour que brancher Upstash soit un changement d'un seul fichier
- * et non une reprise de toutes les actions.
+ * Identifiant du quota. Par session, on prend le token du panier s'il existe,
+ * l'IP hachée sinon : un premier ajout au panier n'a pas encore de cookie.
  */
+async function rateLimitIdentifier(rule: RateLimitRule): Promise<string> {
+  if (rule.by === "session") {
+    const token = await readCartToken();
+    if (token) return `s:${token}`;
+  }
+  return `ip:${await currentIpHash()}`;
+}
+
 async function checkRateLimit(
-  _ctx: ActionContext,
+  ctx: ActionContext,
   rule: RateLimitRule | undefined,
 ): Promise<boolean> {
   if (!rule) return true;
-  // TODO(HEP-35) : @upstash/ratelimit, clé `${ctx.name}:${identifier}`.
-  return true;
+  try {
+    const verdict = await consumeRateLimit(ctx.name, rule, await rateLimitIdentifier(rule));
+    return verdict.allowed;
+  } catch (error) {
+    // Échec ouvert, comme `consumeRateLimit` : un sel manquant ne doit pas
+    // bloquer tous les formulaires du site.
+    captureException(error, ctx);
+    return true;
+  }
+}
+
+/**
+ * Vercel BotID. Hors Vercel (local, CI), `checkBotId` répond toujours
+ * « humain » : la vérification ne gêne pas le développement.
+ */
+async function isBot(): Promise<boolean> {
+  const { checkBotId } = await import("botid/server");
+  const verdict = await checkBotId();
+  return verdict.isBot;
 }
 
 /**
@@ -97,6 +123,10 @@ export function action<S extends z.ZodType, T>(
         message: DEFAULT_MESSAGES.VALIDATION,
         fields: toFieldErrors(parsed.error),
       };
+    }
+
+    if (options.botProtection && (await isBot())) {
+      return { ok: false, code: "BOT_DETECTED", message: DEFAULT_MESSAGES.BOT_DETECTED };
     }
 
     if (!(await checkRateLimit(ctx, options.rateLimit))) {
