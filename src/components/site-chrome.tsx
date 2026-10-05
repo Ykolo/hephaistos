@@ -35,8 +35,12 @@ export function SiteChrome({
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-hidden">
-      <AnnouncementBar />
-      <Header />
+      {/* `contents` : aucune boîte, le header reste collant. Masqué à
+          l'impression — le bon de préparation (HEP-56) sort sans le site. */}
+      <div className="contents print:hidden">
+        <AnnouncementBar />
+        <Header />
+      </div>
       <motion.main
         key={pathname}
         initial={{ opacity: 0 }}
@@ -46,7 +50,9 @@ export function SiteChrome({
       >
         {children}
       </motion.main>
-      <Footer />
+      <div className="contents print:hidden">
+        <Footer />
+      </div>
 
       <MobileMenu />
       <CartDrawer />
