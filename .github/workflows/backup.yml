@@ -1,0 +1,128 @@
+# Sauvegarde logique quotidienne de la base de production (HEP-36).
+#
+# Complète la restauration point-in-time de Neon, plafonnée à 6 h sur le plan
+# gratuit : ici, 30 jours d'exports quotidiens.
+#
+# Chaque export est **restauré pour de vrai** dans un Postgres jetable avant
+# d'être conservé. Une sauvegarde jamais relue n'est pas une sauvegarde : un
+# dump tronqué ou corrompu fait échouer le job, et GitHub envoie un email
+# d'échec au propriétaire du dépôt — c'est l'alerte demandée par l'issue.
+#
+# Secrets requis (Settings → Secrets and variables → Actions) :
+#   BACKUP_DATABASE_URL  chaîne DIRECTE (sans -pooler) de la branche
+#                        `production` ; idéalement un rôle en lecture seule.
+#   BACKUP_PASSPHRASE    phrase de chiffrement, 32 caractères aléatoires
+#                        minimum, conservée AUSSI hors de GitHub (gestionnaire
+#                        de mots de passe). Sans elle, les exports sont
+#                        irrécupérables.
+name: Sauvegarde
+
+on:
+  schedule:
+    # 3 h 17 UTC : creux de trafic, et hors de l'heure pile où tous les crons
+    # de GitHub se bousculent.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: Export, vérification, archivage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      # Base de vérification : même majeure que Neon (Postgres 18).
+      verify:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: verify
+          POSTGRES_PASSWORD: verify
+          POSTGRES_DB: verify
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U verify -d verify"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Refus sur un dépôt public
+        # Les artefacts d'un dépôt public sont téléchargeables par n'importe
+        # quel compte GitHub. Chiffrés ou non, les données clients n'ont rien
+        # à y faire.
+        if: ${{ !github.event.repository.private }}
+        run: |
+          echo "::error::Dépôt public : sauvegarde refusée. Passer le dépôt en privé (Settings → General → Danger Zone)."
+          exit 1
+
+      - name: Secrets présents
+        env:
+          DB: ${{ secrets.BACKUP_DATABASE_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          test -n "$DB"   || { echo "::error::BACKUP_DATABASE_URL manquant"; exit 1; }
+          test -n "$PASS" || { echo "::error::BACKUP_PASSPHRASE manquant"; exit 1; }
+          case "$DB" in *-pooler*) echo "::error::Chaîne poolée : pg_dump exige la chaîne directe"; exit 1;; esac
+
+      - name: Client Postgres 18
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSo /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+
+      - name: Export
+        env:
+          DB: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          STAMP=$(date -u +%Y-%m-%dT%H%MZ)
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          # Format custom : compressé, et restaurable table par table.
+          # --no-owner / --no-acl : restaurable sous n'importe quel rôle.
+          pg_dump "$DB" --format=custom --no-owner --no-acl --file="hephaistos-$STAMP.dump"
+          ls -lh "hephaistos-$STAMP.dump"
+
+      - name: Vérification par restauration réelle
+        env:
+          DB: ${{ secrets.BACKUP_DATABASE_URL }}
+          VERIFY: postgresql://verify:verify@localhost:5432/verify
+        run: |
+          pg_restore --no-owner --no-acl --exit-on-error --dbname="$VERIFY" "hephaistos-$STAMP.dump"
+
+          # Même nombre de lignes, table par table, qu'en production.
+          COUNT_SQL="SELECT string_agg(format('%s=%s', relname, (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from public.%I', relname), false, true, '')))[1]), ',' ORDER BY relname) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind = 'r' AND n.nspname = 'public'"
+          SOURCE=$(psql "$DB" -Atc "$COUNT_SQL")
+          RESTORED=$(psql "$VERIFY" -Atc "$COUNT_SQL")
+          echo "Production : $SOURCE"
+          echo "Restauré   : $RESTORED"
+          if [ "$SOURCE" != "$RESTORED" ]; then
+            # Une écriture pendant l'export peut décaler un compteur d'une
+            # unité ; on préfère une fausse alerte à une sauvegarde douteuse.
+            echo "::error::Les comptes diffèrent entre la production et l'export restauré."
+            exit 1
+          fi
+          test -n "$SOURCE" || { echo "::error::Aucune table trouvée."; exit 1; }
+
+      - name: Chiffrement
+        env:
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASS" \
+            --symmetric --cipher-algo AES256 \
+            --output "hephaistos-$STAMP.dump.gpg" "hephaistos-$STAMP.dump"
+          shred -u "hephaistos-$STAMP.dump"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hephaistos-${{ env.STAMP }}
+          path: hephaistos-${{ env.STAMP }}.dump.gpg
+          retention-days: 30
+          if-no-files-found: error
+          # Déjà compressé et chiffré : recompresser ne gagnerait rien.
+          compression-level: 0
