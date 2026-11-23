@@ -18,6 +18,7 @@
     "images:migrate": "tsx scripts/migrate-images.ts",
     "images:migrate-hero": "tsx scripts/migrate-hero-images.ts",
     "db:reset": "prisma migrate reset",
+    "admin:promote": "tsx scripts/promote-admin.ts",
     "db:local:up": "docker run -d --name hep-pg -e POSTGRES_PASSWORD=hep -e POSTGRES_USER=hep -e POSTGRES_DB=hephaistos -p 55432:5432 postgres:17-alpine",
     "db:local:down": "docker rm -f hep-pg"
   },
@@ -32,6 +33,7 @@
     "@upstash/ratelimit": "^2.1.0",
     "@upstash/redis": "^1.39.0",
     "@vercel/blob": "^2.8.0",
+    "better-auth": "^1.7.27",
     "botid": "^1.5.11",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
