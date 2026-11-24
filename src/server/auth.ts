@@ -192,9 +192,14 @@ export const auth = betterAuth({
   session: {
     // 30 jours glissants : la session est prolongée au plus une fois par
     // jour d'activité (rotation de l'expiration, le jeton reste en base et
-    // révocable). La session admin plus courte (8 h) arrive avec HEP-78.
+    // révocable). Une session admin est en plus bornée à 8 h et coupée après
+    // 30 min d'inactivité, par `admin-guard.ts` (HEP-78).
     expiresIn: THIRTY_DAYS,
     updateAge: ONE_DAY,
+    additionalFields: {
+      // Écrit par la garde d'administration (HEP-78), jamais par le client.
+      lastActiveAt: { type: "date", required: false, input: false },
+    },
     // Pas de `cookieCache` : chaque requête relit la session en base. Une
     // session révoquée (mot de passe changé, compte supprimé) cesse donc de
     // fonctionner immédiatement, et non quelques minutes plus tard.

@@ -30,13 +30,18 @@ cp .env.example .env.local
 clés attendues et leur forme. Chaque bloc dit à quoi il sert et quelle issue
 Linear le remplira.
 
-Pour démarrer, seules trois clés comptent :
+Pour démarrer, seules quatre clés comptent :
 
 ```bash
 DATABASE_URL="postgresql://hep:hep@localhost:55432/hephaistos"
 DIRECT_URL="postgresql://hep:hep@localhost:55432/hephaistos"
-ADMIN_UNSAFE_LOCAL="1"   # débloque /admin en local — voir plus bas
+BETTER_AUTH_SECRET="…"                    # openssl rand -base64 32
+BETTER_AUTH_URL="http://localhost:3000"   # le port réellement utilisé
 ```
+
+`BETTER_AUTH_URL` doit correspondre au port du serveur de dev : si le 3000 est
+pris et que Next démarre sur le 3001, la connexion est refusée (contrôle
+d'origine) tant que la variable n'est pas corrigée.
 
 ## La base de données
 
@@ -102,7 +107,9 @@ bun run test tests/pricing.test.ts    # un fichier
 Les tests écrivent et suppriment des données. Deux protections :
 
 1. ils lisent `DIRECT_URL` ?? `DATABASE_URL`, et **refusent de démarrer** si
-   l'URL pointe vers Neon ;
+   l'URL pointe vers Neon — sauf avec `TEST_ON_NEON_BRANCH=1`, réservé à une
+   branche Neon **jetable**, créée pour l'occasion (sans Docker, c'est la
+   seule façon de lancer la suite) ;
 2. `fileParallelism` est désactivé — les tests de concurrence partagent une
    base, les paralléliser ferait échouer les assertions sur le stock pour de
    mauvaises raisons.
@@ -125,21 +132,24 @@ ci-dessous.
 
 ## L'administration
 
-`/admin` n'a **pas encore d'authentification** (Better Auth = HEP-62, garde et
-2FA = HEP-78). En attendant, elle est verrouillée par un double garde-fou dans
-`src/server/admin-guard.ts` :
+`/admin` exige un compte **admin** avec **double authentification** (HEP-62,
+HEP-78), en local comme en production. Pour t'en créer un en local :
 
-- bloquée dès que `NODE_ENV === "production"` ;
-- et, même en développement, il faut poser `ADMIN_UNSAFE_LOCAL="1"`.
+1. inscris-toi via l'API (`POST /api/auth/sign-up/email`) ou, plus tard, le
+   formulaire client (HEP-63) ; sans clé Resend, le lien de confirmation
+   s'affiche dans la console du serveur de dev ;
+2. `bun run admin:promote <email>` ;
+3. ouvre `/admin` : connexion, puis activation du TOTP sur `/admin/securite`.
 
-Sans les deux, `/admin` renvoie un **404** — pas un 403, qui confirmerait à un
-visiteur que l'URL existe et vaut la peine d'être creusée.
+La règle d'accès vit dans `src/server/admin-guard.ts` et s'applique trois
+fois : dans `src/proxy.ts` (chaque requête), dans le layout du back-office,
+et en tête de **chaque** Server Action (`requireAdminAction()`). Un client
+connecté reçoit un **404**, pas un 403, qui confirmerait que l'URL existe.
 
-**Ne jamais définir `ADMIN_UNSAFE_LOCAL` en préproduction ni en production.**
+Une session admin dure 8 h au plus et se ferme après 30 min d'inactivité ;
+elle est alors supprimée en base, pas seulement refusée.
 
-Pages disponibles : `/admin/produits`, `/admin/produits/[slug]`, `/admin/lots`,
-`/admin/rappel`. Leur mode d'emploi est dans
-[`BACK-OFFICE.md`](./BACK-OFFICE.md).
+Le mode d'emploi des pages est dans [`BACK-OFFICE.md`](./BACK-OFFICE.md).
 
 ## Le cron des réservations
 

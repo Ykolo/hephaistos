@@ -19,6 +19,9 @@ export const routes = {
  * chrome du site, hors `<Suspense>` — bloquant pour toute la page.
  */
 export const adminRoutes = {
+  login: "/admin/connexion",
+  security: "/admin/securite",
+  auditLog: "/admin/journal",
   orders: "/admin/commandes",
   order: (number: string) => `/admin/commandes/fiche?numero=${encodeURIComponent(number)}`,
   packingSlip: (number: string) =>

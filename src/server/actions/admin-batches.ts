@@ -3,7 +3,7 @@
 import { batchSchema, recallSchema } from "@/lib/validation/product";
 import { action, formAction } from "../action";
 import { db } from "../db";
-import { guardAdminAction, PROVISIONAL_ACTOR_ID } from "../admin-guard";
+import { requireAdminAction } from "../admin-guard";
 import { ActionError } from "../errors";
 import {
   recallByBatch,
@@ -16,7 +16,7 @@ import {
 export const saveBatch = formAction(
   batchSchema,
   async (input) => {
-    guardAdminAction();
+    const { actorId } = await requireAdminAction();
 
     const product = await db.product.findUnique({
       where: { slug: input.productSlug },
@@ -29,7 +29,7 @@ export const saveBatch = formAction(
       code: input.code,
       quantity: input.quantity,
       expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
-      actorId: PROVISIONAL_ACTOR_ID,
+      actorId,
     });
 
     return { batchId: result.batchId, stock: result.stock };
@@ -48,7 +48,8 @@ export const saveBatch = formAction(
 export const searchRecall = action(
   recallSchema,
   async ({ code }): Promise<RecallResult & { csv: string }> => {
-    guardAdminAction();
+    // Lecture seule, mais des données personnelles : même garde.
+    await requireAdminAction();
     const result = await recallByBatch(db, code);
     return { ...result, csv: recallToCsv(result) };
   },

@@ -7,9 +7,11 @@
  * à l'API (`input: false` dans `src/server/auth.ts`). Le compte doit déjà
  * exister et avoir confirmé son adresse.
  *
- * Le rôle seul ne suffit pas : `requireAdmin()` exige aussi la double
- * authentification. Tant qu'elle n'est pas activée, le compte promu n'a accès
- * à rien.
+ * Le rôle seul ne suffit pas : l'administration exige aussi la double
+ * authentification. À la première connexion, le compte promu est envoyé sur
+ * `/admin/securite` pour l'activer — et n'a accès à rien d'autre avant.
+ * Promouvoir un compte juste avant que son titulaire active son TOTP, pas
+ * des jours avant : entre les deux, le mot de passe seul suffit à l'activer.
  *
  * ⚠️ Vérifier la base visée avant de lancer : `DATABASE_URL` décide.
  */
@@ -64,7 +66,7 @@ async function main(): Promise<number> {
       `${email} est admin.` +
         (user.twoFactorEnabled
           ? ""
-          : " Il doit encore activer la double authentification."),
+          : " Double authentification à activer sur /admin/securite à la première connexion."),
     );
     return 0;
   } finally {

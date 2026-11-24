@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/server/db";
-import { PROVISIONAL_ACTOR_ID } from "@/server/admin-guard";
+import { actorLabel, loadActorNames } from "@/server/services/actors";
 import {
   adminNextStatuses,
   getAdminOrder,
@@ -29,24 +29,6 @@ const dateTime = new Intl.DateTimeFormat("fr-FR", {
 });
 
 const heading = "m-0 mb-3 text-[12px] font-semibold uppercase tracking-[.14em]";
-
-/** Auteur d'un événement du journal, en clair. */
-function actorLabel(actorId: string | null): string {
-  switch (actorId) {
-    case null:
-      return "—";
-    case "@stripe":
-      return "Stripe";
-    case "@client":
-      return "Client";
-    case "@systeme":
-      return "Automatique";
-    case PROVISIONAL_ACTOR_ID:
-      return "Admin (local)";
-    default:
-      return actorId;
-  }
-}
 
 function statusLabel(status: string | null): string {
   if (!status) return "création";
@@ -78,6 +60,7 @@ async function OrderDetail({ searchParams }: { searchParams: SearchParams }) {
   const { numero } = await searchParams;
   const order = typeof numero === "string" ? await getAdminOrder(db, numero.trim()) : null;
   if (!order) notFound();
+  const actorNames = await loadActorNames(db, order.events.map((e) => e.actorId));
 
   const next = adminNextStatuses(order.status);
   const cancelable = ["PENDING", "PAID", "PREPARING"].includes(order.status);
@@ -273,7 +256,7 @@ async function OrderDetail({ searchParams }: { searchParams: SearchParams }) {
                 {order.events.map((e) => (
                   <li key={e.id}>
                     <div className="tabular-nums text-[12px] text-muted-ink">
-                      {dateTime.format(e.createdAt)} · {actorLabel(e.actorId)}
+                      {dateTime.format(e.createdAt)} · {actorLabel(e.actorId, actorNames)}
                     </div>
                     <div>
                       {statusLabel(e.from)} → <strong>{statusLabel(e.to)}</strong>

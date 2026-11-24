@@ -7,7 +7,8 @@ import {
 } from "@/lib/validation/admin-order";
 import { action } from "../action";
 import { db } from "../db";
-import { guardAdminAction, PROVISIONAL_ACTOR_ID } from "../admin-guard";
+import { requireAdminAction } from "../admin-guard";
+import { recordAdminWrite } from "../audit";
 import { cancelOrder, setInternalNote, transitionOrder } from "../services/orders";
 
 /**
@@ -21,15 +22,29 @@ import { cancelOrder, setInternalNote, transitionOrder } from "../services/order
  * la file d'envoi arrive avec HEP-66, et c'est elle qui les consommera.
  */
 
-const ADMIN = { kind: "admin", id: PROVISIONAL_ACTOR_ID } as const;
+/** Auteur des écritures : l'admin connecté, vérifié par `requireAdminAction`. */
+async function currentAdmin() {
+  const { actorId } = await requireAdminAction();
+  return { kind: "admin", id: actorId } as const;
+}
 
 export const changeOrderStatus = action(
   changeOrderStatusSchema,
   async ({ orderId, to, note }) => {
-    guardAdminAction();
-    return db.$transaction((tx) =>
-      transitionOrder(tx, { orderId, to, actor: ADMIN, note }),
-    );
+    const admin = await currentAdmin();
+    return db.$transaction(async (tx) => {
+      const result = await transitionOrder(tx, { orderId, to, actor: admin, note });
+      // `OrderEvent` raconte la vie de la commande ; `AuditLog` répond à
+      // « qu'a fait cet admin ? ». Les deux, dans la même transaction.
+      await recordAdminWrite(tx, {
+        actorId: admin.id,
+        entity: "Order",
+        entityId: orderId,
+        action: "status.change",
+        diff: { to, note: note ?? null },
+      });
+      return result;
+    });
   },
   { name: "admin.order.status" },
 );
@@ -37,8 +52,8 @@ export const changeOrderStatus = action(
 export const saveOrderNote = action(
   orderNoteSchema,
   async ({ orderId, note }) => {
-    guardAdminAction();
-    await db.$transaction((tx) => setInternalNote(tx, orderId, note, ADMIN));
+    const admin = await currentAdmin();
+    await db.$transaction((tx) => setInternalNote(tx, orderId, note, admin));
     return { saved: true };
   },
   { name: "admin.order.note" },
@@ -54,10 +69,18 @@ export const saveOrderNote = action(
 export const cancelOrderFromAdmin = action(
   cancelOrderSchema,
   async ({ orderId, reason }) => {
-    guardAdminAction();
-    const result = await db.$transaction((tx) =>
-      cancelOrder(tx, { orderId, reason, actor: ADMIN }),
-    );
+    const admin = await currentAdmin();
+    const result = await db.$transaction(async (tx) => {
+      const cancelled = await cancelOrder(tx, { orderId, reason, actor: admin });
+      await recordAdminWrite(tx, {
+        actorId: admin.id,
+        entity: "Order",
+        entityId: orderId,
+        action: "cancel",
+        diff: { reason, restocked: cancelled.restocked },
+      });
+      return cancelled;
+    });
     return { restocked: result.restocked.length };
   },
   { name: "admin.order.cancel" },

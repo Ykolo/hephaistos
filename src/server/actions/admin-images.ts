@@ -4,7 +4,8 @@ import { z } from "zod";
 import { action } from "../action";
 import { db } from "../db";
 import { invalidateCatalog } from "../catalog";
-import { guardAdminAction } from "../admin-guard";
+import { requireAdminAction } from "../admin-guard";
+import { recordAdminWrite } from "../audit";
 import { ActionError } from "../errors";
 import {
   attachImage,
@@ -27,7 +28,7 @@ export async function uploadProductImage(
   | { ok: false; code: string; message: string; fields?: Record<string, string> }
 > {
   try {
-    guardAdminAction();
+    const { actorId } = await requireAdminAction();
 
     const file = formData.get("file");
     const slug = String(formData.get("productSlug") ?? "");
@@ -56,6 +57,13 @@ export async function uploadProductImage(
       alt,
       role: role as "PRIMARY" | "HOVER" | "GALLERY",
     });
+    await recordAdminWrite(db, {
+      actorId,
+      entity: "Product",
+      entityId: slug,
+      action: "image.add",
+      diff: { url: result.url, role, alt },
+    });
 
     invalidateCatalog(slug);
     return { ok: true, data: result };
@@ -80,8 +88,15 @@ export async function uploadProductImage(
 export const removeProductImage = action(
   z.object({ imageId: z.string().min(1), productSlug: z.string().min(1) }),
   async ({ imageId, productSlug }) => {
-    guardAdminAction();
+    const { actorId } = await requireAdminAction();
     await detachImage(db, imageId);
+    await recordAdminWrite(db, {
+      actorId,
+      entity: "Product",
+      entityId: productSlug,
+      action: "image.remove",
+      diff: { imageId },
+    });
     invalidateCatalog(productSlug);
     return { removed: true };
   },
@@ -94,8 +109,15 @@ export const reorderProductImages = action(
     imageIds: z.array(z.string().min(1)).min(1),
   }),
   async ({ productSlug, imageIds }) => {
-    guardAdminAction();
+    const { actorId } = await requireAdminAction();
     await reorderImages(db, productSlug, imageIds);
+    await recordAdminWrite(db, {
+      actorId,
+      entity: "Product",
+      entityId: productSlug,
+      action: "image.reorder",
+      diff: { imageIds },
+    });
     invalidateCatalog(productSlug);
     return { count: imageIds.length };
   },
