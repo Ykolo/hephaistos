@@ -38,7 +38,11 @@ function vercelOrigins(): string[] {
     .map((host) => `https://${host}`);
 }
 
-const baseURL = process.env.BETTER_AUTH_URL || vercelOrigins()[0];
+// Dernier recours : l'origine publique du site. Sans aucune origine, Better
+// Auth écrit des liens relatifs dans les emails — inutilisables hors du site,
+// et c'est ce qui arrive en CI, où ni BETTER_AUTH_URL ni VERCEL_URL n'existent.
+const baseURL =
+  process.env.BETTER_AUTH_URL || vercelOrigins()[0] || process.env.NEXT_PUBLIC_SITE_URL;
 
 // --- Emails ----------------------------------------------------------------
 
