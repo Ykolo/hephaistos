@@ -17,51 +17,59 @@ import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaNeon } from "@prisma/adapter-neon";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const email = process.argv[2]?.trim().toLowerCase();
-const url = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+// Pas d'`await` au niveau supérieur : `tsx` compile ce script en CommonJS.
+async function main(): Promise<number> {
+  const email = process.argv[2]?.trim().toLowerCase();
+  const url = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
 
-if (!email) {
-  console.error("Usage : bun run admin:promote <email>");
-  process.exit(1);
-}
-if (!url) {
-  console.error("DATABASE_URL est absent.");
-  process.exit(1);
-}
-
-const adapter = /neon\.(tech|build)/.test(url)
-  ? new PrismaNeon({ connectionString: url })
-  : new PrismaPg({ connectionString: url });
-const db = new PrismaClient({ adapter });
-
-try {
-  const user = await db.user.findUnique({ where: { email } });
-  if (!user) {
-    console.error(`Aucun compte pour ${email}.`);
-    process.exit(1);
+  if (!email) {
+    console.error("Usage : bun run admin:promote <email>");
+    return 1;
   }
-  if (!user.emailVerified) {
-    console.error(`${email} n'a pas encore confirmé son adresse.`);
-    process.exit(1);
+  if (!url) {
+    console.error("DATABASE_URL est absent.");
+    return 1;
   }
 
-  await db.$transaction([
-    db.user.update({ where: { id: user.id }, data: { role: "admin" } }),
-    db.auditLog.create({
-      data: {
-        actorId: null,
-        entity: "User",
-        entityId: user.id,
-        action: "role.promote",
-        diff: { role: { from: user.role, to: "admin" } },
-      },
-    }),
-  ]);
+  const adapter = /neon\.(tech|build)/.test(url)
+    ? new PrismaNeon({ connectionString: url })
+    : new PrismaPg({ connectionString: url });
+  const db = new PrismaClient({ adapter });
 
-  console.log(
-    `${email} est admin.` +
-      (user.twoFactorEnabled ? "" : " Il doit encore activer la double authentification."),
-  );
-} finally {
-  await db.$disconnect();
+  try {
+    const user = await db.user.findUnique({ where: { email } });
+    if (!user) {
+      console.error(`Aucun compte pour ${email}.`);
+      return 1;
+    }
+    if (!user.emailVerified) {
+      console.error(`${email} n'a pas encore confirmé son adresse.`);
+      return 1;
+    }
+
+    await db.$transaction([
+      db.user.update({ where: { id: user.id }, data: { role: "admin" } }),
+      db.auditLog.create({
+        data: {
+          actorId: null,
+          entity: "User",
+          entityId: user.id,
+          action: "role.promote",
+          diff: { role: { from: user.role, to: "admin" } },
+        },
+      }),
+    ]);
+
+    console.log(
+      `${email} est admin.` +
+        (user.twoFactorEnabled
+          ? ""
+          : " Il doit encore activer la double authentification."),
+    );
+    return 0;
+  } finally {
+    await db.$disconnect();
+  }
 }
+
+main().then((code) => process.exit(code));
