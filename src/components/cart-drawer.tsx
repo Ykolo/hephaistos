@@ -103,6 +103,14 @@ function DrawerContent({ close }: { close: () => void }) {
                     affiché n'est pas encore le montant à payer — la livraison
                     manque encore (`totals.shippingKnown` est faux ici).
                   */}
+                  {cart.totals.discountCents > 0 && (
+                    <div className="mb-1 flex items-baseline justify-between text-[12.5px]">
+                      <span className="text-muted-ink">Remise ({cart.totals.discountCode})</span>
+                      <span className="tabular-nums">
+                        −{formatPriceCompact(cart.totals.discountCents)}
+                      </span>
+                    </div>
+                  )}
                   <p className="m-0 mb-5 text-[11.5px] leading-[1.5] text-muted-ink">
                     TVA incluse. Frais de livraison calculés à l&apos;étape
                     suivante.

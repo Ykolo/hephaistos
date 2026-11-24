@@ -113,6 +113,17 @@ Deux règles à ne pas casser :
   (`afterSessionHook` dans `src/server/auth.ts`), quel que soit le chemin qui
   ouvre la session.
 
+Les codes promo (HEP-75) se gèrent dans `/admin/codes-promo`. Trois moments,
+trois fonctions de `src/server/services/discounts.ts`, à ne pas confondre :
+
+- **saisie** dans le panier (`checkDiscount`) : rien n'est consommé ;
+- **création de la commande** (`claimDiscountForOrder`, appelé par
+  `createOrder`) : revalidation complète **sous verrou** ; une commande
+  `PENDING` garde sa place sur un code limité pendant la durée d'une session
+  Stripe. C'est ce qui empêche un code à usage unique de passer deux fois ;
+- **paiement confirmé** (`redeemDiscount`, à appeler par le webhook HEP-59) :
+  seul endroit où `usedCount` augmente.
+
 ## Les tests
 
 ```bash

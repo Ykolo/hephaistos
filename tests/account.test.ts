@@ -181,6 +181,8 @@ describe("fusion du panier à la connexion (HEP-49)", () => {
       mergeCartsOnSignIn(tx, { guestToken: guest.token, userId: user.id, newToken: cartToken() }),
     );
     expect(result.discountReplaced).toBe(true);
+    // Le code écarté remonte, pour que le panier le dise au client.
+    expect(result.replacedDiscountCode).toBe("COMPTE");
     expect((await testDb.cart.findUniqueOrThrow({ where: { id: guest.id } })).discountCode).toBe("INVITE");
   });
 

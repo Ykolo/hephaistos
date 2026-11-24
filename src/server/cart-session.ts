@@ -59,6 +59,20 @@ export async function requireCartToken(): Promise<string> {
   return token;
 }
 
+/**
+ * Message à montrer une fois dans le panier, posé hors d'une Server Action.
+ *
+ * Le hook de connexion (HEP-49) sait que le code du compte a été remplacé par
+ * celui du panier invité, mais ne parle pas à l'interface : il dépose le code
+ * écarté dans ce cookie, que le panier lit et que le client ferme.
+ */
+export const CART_NOTICE_COOKIE = "hep_cart_notice";
+
+export const cartNoticeCookieOptions = {
+  ...cartCookieOptions,
+  maxAge: 24 * 60 * 60,
+};
+
 /** Oublie le panier courant — après une commande payée (lot 4). */
 export async function clearCartCookie(): Promise<void> {
   const store = await cookies();

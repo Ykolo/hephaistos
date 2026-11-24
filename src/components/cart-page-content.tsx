@@ -7,6 +7,7 @@ import { useCart, useEmptyCart } from "@/lib/cart-queries";
 import { CartLines } from "@/components/cart-lines";
 import { Reveal } from "@/components/reveal";
 import { ClientOnly } from "@/components/client-only";
+import { CartDiscountField, CartDiscountLine, CartNotice } from "@/components/cart-discount";
 
 /**
  * Page `/panier` (HEP-50).
@@ -71,6 +72,8 @@ function CartContent() {
             Récapitulatif
           </h2>
 
+          <CartNotice cart={cart} />
+
           <div className="mb-2 flex items-baseline justify-between">
             <span className="text-[13px] text-body">
               Sous-total ({cart.itemCount} article{cart.itemCount > 1 ? "s" : ""})
@@ -80,12 +83,25 @@ function CartContent() {
             </span>
           </div>
 
+          <CartDiscountLine cart={cart} className="mb-2" />
+
           <div className="mb-5 flex items-baseline justify-between">
             <span className="text-[13px] text-body">Livraison</span>
             <span className="text-[13px] text-muted-ink">
-              Calculée à l&apos;étape suivante
+              {cart.totals.freeShipping
+                ? "Offerte"
+                : "Calculée à l'étape suivante"}
             </span>
           </div>
+
+          {cart.totals.discountCents > 0 && (
+            <div className="mb-5 flex items-baseline justify-between border-t border-line-strong pt-4">
+              <span className="text-[13px] text-body">Total hors livraison</span>
+              <span className="font-serif text-[1.2rem]">
+                {formatPriceCompact(cart.totals.totalCents)}
+              </span>
+            </div>
+          )}
 
           {/*
             La TVA n'est pas ajoutée au sous-total : elle en est extraite
@@ -106,25 +122,7 @@ function CartContent() {
             s&apos;affichera avant le paiement.
           </p>
 
-          {/*
-            Le code promo relève du lot 8 (HEP-75). Le champ est visible mais
-            désactivé : le retirer ferait ressurgir un décalage de mise en page
-            le jour où il sera branché, et l'annoncer actif serait mentir.
-          */}
-          <div className="mb-6">
-            <label
-              htmlFor="promo"
-              className="mb-1.5 block text-[11px] uppercase tracking-[.12em] text-muted-ink"
-            >
-              Code promo
-            </label>
-            <input
-              id="promo"
-              disabled
-              placeholder="Bientôt disponible"
-              className="w-full cursor-not-allowed border border-line-strong bg-transparent px-3 py-2 text-[14px] text-muted-ink"
-            />
-          </div>
+          <CartDiscountField cart={cart} />
 
           {cart.hasUnavailableLines && (
             <p

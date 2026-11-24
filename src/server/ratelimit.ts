@@ -46,6 +46,9 @@ export const RATE_LIMITS = {
   authEmail: { limit: 3, windowSeconds: 15 * 60, by: "account" },
   checkout: { limit: 10, windowSeconds: 10 * 60, by: "ip" },
   cart: { limit: 60, windowSeconds: 60, by: "session" },
+  // Saisie d'un code promo (HEP-75) : par IP, sinon un script essaie tout le
+  // dictionnaire des codes plausibles (NOEL10, BIENVENUE15…) en une minute.
+  discount: { limit: 10, windowSeconds: 10 * 60, by: "ip" },
 } as const satisfies Record<string, RateLimitRule>;
 
 export type RateLimitVerdict = { allowed: boolean; remaining: number };
