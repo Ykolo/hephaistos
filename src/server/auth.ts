@@ -5,10 +5,13 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { twoFactor } from "better-auth/plugins";
 import { after } from "next/server";
+import { CART_COOKIE, cartCookieOptions, newCartToken } from "./cart-session";
 import { db } from "./db";
 import { accountEmail, sendEmail, type EmailMessage } from "./email";
 import { ipHashFromHeaders } from "./ip";
 import { consumeRateLimit, RATE_LIMITS, type RateLimitRule } from "./ratelimit";
+import { attachGuestOrders } from "./services/account";
+import { mergeCartsOnSignIn } from "./services/cart-merge";
 
 /**
  * Authentification (HEP-62) — un seul socle pour les clients et l'admin.
@@ -120,6 +123,44 @@ const rateLimitHook = createAuthMiddleware(async (ctx) => {
   }
 });
 
+// --- Après connexion ---------------------------------------------------------
+
+/**
+ * Tout ce qui suit l'ouverture d'une session, quel que soit le chemin :
+ * connexion, connexion automatique après vérification de l'email, second
+ * facteur validé. Une seule porte, pour qu'aucun parcours ne l'oublie.
+ *
+ * - le panier invité rejoint celui du compte (HEP-49), sous un nouveau jeton ;
+ * - les commandes passées sans compte avec cette adresse sont rattachées
+ *   (HEP-63) — l'adresse a forcément été vérifiée pour qu'une session existe.
+ *
+ * À la déconnexion, le cookie de panier part aussi : sur un ordinateur
+ * partagé, le visiteur suivant n'a pas à retrouver le panier du compte.
+ */
+const afterSessionHook = createAuthMiddleware(async (ctx) => {
+  if (ctx.path === "/sign-out") {
+    ctx.setCookie(CART_COOKIE, "", { ...cartCookieOptions, maxAge: 0 });
+    return;
+  }
+
+  const created = ctx.context.newSession;
+  if (!created) return;
+  // Mot de passe validé, second facteur encore attendu : la session n'est
+  // pas ouverte, rien ne doit encore s'y rattacher.
+  const twoFactorPlugin = ctx.context.getPlugin("two-factor") as {
+    shouldRequireTwoFactor?: (c: typeof ctx) => Promise<boolean>;
+  } | null;
+  if (await twoFactorPlugin?.shouldRequireTwoFactor?.(ctx)) return;
+
+  const { user } = created;
+  const guestToken = ctx.getCookie(CART_COOKIE) ?? null;
+  const merged = await db.$transaction(async (tx) => {
+    await attachGuestOrders(tx, user);
+    return mergeCartsOnSignIn(tx, { guestToken, userId: user.id, newToken: newCartToken() });
+  });
+  if (merged.token) ctx.setCookie(CART_COOKIE, merged.token, cartCookieOptions);
+});
+
 // --- Configuration -----------------------------------------------------------
 
 export const auth = betterAuth({
@@ -138,7 +179,29 @@ export const auth = betterAuth({
     minPasswordLength: 12,
     maxPasswordLength: 128,
     revokeSessionsOnPasswordReset: true,
+    // Une heure, et à usage unique : Better Auth consomme le jeton au premier
+    // changement de mot de passe réussi.
     resetPasswordTokenExpiresIn: 60 * 60,
+    /**
+     * Inscription avec une adresse déjà inscrite. La réponse HTTP est
+     * identique à une vraie inscription (Better Auth, parce que la
+     * vérification d'email est requise) : rien ne dit à l'auteur que
+     * l'adresse est en base. C'est le titulaire qui est prévenu, par email.
+     */
+    onExistingUserSignUp: async ({ user }) => {
+      deliverInBackground(
+        accountEmail({
+          to: user.email,
+          subject: "Vous avez déjà un compte Héphaïstos",
+          intro:
+            "Quelqu'un — vous, sans doute — a voulu créer un compte avec cette adresse. Elle a déjà un compte.",
+          cta: "Me connecter",
+          url: `${baseURL ?? ""}/connexion`,
+          outro:
+            "Mot de passe oublié ? Le lien « Mot de passe oublié » de la page de connexion vous en fera choisir un nouveau. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.",
+        }),
+      );
+    },
     sendResetPassword: async ({ user, url }) => {
       deliverInBackground(
         accountEmail({
@@ -162,6 +225,12 @@ export const auth = betterAuth({
     sendOnSignIn: true,
     autoSignInAfterVerification: true,
     expiresIn: ONE_DAY,
+    // L'adresse vient d'être prouvée : c'est le seul moment où rattacher les
+    // commandes passées sans compte est sûr (HEP-63). La connexion le refait,
+    // pour les commandes passées en invité depuis.
+    afterEmailVerification: async (user) => {
+      await attachGuestOrders(db, user);
+    },
     sendVerificationEmail: async ({ user, url }) => {
       deliverInBackground(
         accountEmail({
@@ -218,7 +287,7 @@ export const auth = betterAuth({
     defaultCookieAttributes: { httpOnly: true, sameSite: "lax" },
   },
 
-  hooks: { before: rateLimitHook },
+  hooks: { before: rateLimitHook, after: afterSessionHook },
 
   plugins: [
     // TOTP (application d'authentification). Obligatoire pour un admin,

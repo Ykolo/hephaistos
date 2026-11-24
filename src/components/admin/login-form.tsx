@@ -4,31 +4,14 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { submitWith } from "@/components/account/fields";
 import { authClient } from "@/lib/auth-client";
+import { authErrorMessage } from "@/lib/auth-messages";
+
+const messageFor = (error: Parameters<typeof authErrorMessage>[0]) =>
+  authErrorMessage(error, "Connexion impossible. Réessayez.");
 
 type Step = "password" | "totp" | "backup";
-
-/** Messages de Better Auth traduits — jamais le texte anglais brut. */
-function messageFor(error: { code?: string; status?: number } | null | undefined): string {
-  if (!error) return "Connexion impossible. Réessayez.";
-  if (error.status === 429) return "Trop de tentatives. Réessayez dans quelques minutes.";
-  switch (error.code) {
-    case "INVALID_EMAIL_OR_PASSWORD":
-      return "Email ou mot de passe incorrect.";
-    case "EMAIL_NOT_VERIFIED":
-      return "Adresse non confirmée : un nouveau lien vient de vous être envoyé.";
-    case "INVALID_CODE":
-    case "INVALID_TWO_FACTOR_CODE":
-      return "Code incorrect.";
-    case "INVALID_BACKUP_CODE":
-      return "Code de secours incorrect ou déjà utilisé.";
-    case "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE":
-    case "ACCOUNT_LOCKED":
-      return "Trop d'essais : le compte est temporairement verrouillé.";
-    default:
-      return "Connexion impossible. Réessayez.";
-  }
-}
 
 /**
  * Deux étapes : mot de passe, puis code de l'application d'authentification.
@@ -74,7 +57,7 @@ export function AdminLoginForm({ next }: { next: string }) {
 
   if (step === "password") {
     return (
-      <form action={submitPassword} className="grid gap-4">
+      <form onSubmit={submitWith(submitPassword)} className="grid gap-4">
         <div className="grid gap-1.5">
           <Label htmlFor="email">Email</Label>
           <Input id="email" name="email" type="email" autoComplete="username" required />
@@ -98,7 +81,7 @@ export function AdminLoginForm({ next }: { next: string }) {
   }
 
   return (
-    <form action={submitCode} className="grid gap-4">
+    <form onSubmit={submitWith(submitCode)} className="grid gap-4">
       <div className="grid gap-1.5">
         <Label htmlFor="code">
           {step === "totp" ? "Code de l'application d'authentification" : "Code de secours"}
