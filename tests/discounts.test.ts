@@ -13,7 +13,15 @@ import { ActionError } from "@/server/errors";
 import { discountRefusalMessage, type DiscountRefusal } from "@/lib/discounts";
 import { parisDayStart } from "@/lib/dates";
 import type { Address } from "@/lib/validation/address";
-import { cleanupTestProducts, createTestProduct, testDb } from "./helpers/db";
+import {
+  chooseTestShipping,
+  cleanupTestProducts,
+  createTestProduct,
+  testDb,
+  withTestShippingGrid,
+} from "./helpers/db";
+
+withTestShippingGrid();
 
 /**
  * HEP-75 — « un code promo expiré, déjà utilisé, ou sous le minimum est bien
@@ -49,7 +57,8 @@ async function cart(slug: string, qty = 1) {
   return token;
 }
 
-function order(token: string, email: string) {
+async function order(token: string, email: string) {
+  await chooseTestShipping(token);
   return testDb.$transaction(
     (tx) => createOrder(tx, { cartToken: token, email, shippingAddress: ADDRESS }),
     { maxWait: 30_000, timeout: 30_000 },
@@ -260,7 +269,8 @@ describe("revalidation au checkout", () => {
     const saved = await testDb.order.findUniqueOrThrow({ where: { id: created.id } });
     expect(saved.discountCode).toBe(d.code);
     expect(saved.discountCents).toBe(700);
-    expect(saved.totalCents).toBe(4000 - 700);
+    // + 5,90 € de port domicile : la remise ne touche que les produits.
+    expect(saved.totalCents).toBe(4000 - 700 + 590);
   });
 
   it("un code à usage unique ne passe qu'une fois, même tenté par vingt clients à la fois", async () => {

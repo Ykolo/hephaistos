@@ -9,6 +9,7 @@ import {
 import {
   addToCart,
   applyDiscount,
+  chooseShipping,
   dismissCartNotice,
   emptyCart,
   getCart,
@@ -18,8 +19,9 @@ import {
 } from "@/server/actions/cart";
 import type { CartView } from "@/server/services/cart";
 import type { ActionResult } from "@/server/errors";
-import { computeTotals } from "@/server/services/pricing";
+import type { ShippingMethod } from "@/generated/prisma/client";
 import { discountRefusalMessage } from "@/lib/discounts";
+import { priceCart } from "@/lib/shipping";
 
 /**
  * Couche cliente du panier (HEP-50).
@@ -72,10 +74,22 @@ function optimistic(
  * quotas) ; ce qui dépend des lignes — minimum, produit ciblé — se recalcule
  * ici avec elles, pour que la remise apparaisse ou disparaisse en même temps
  * que la quantité change.
+ *
+ * La livraison aussi (HEP-70) : la grille est arrivée avec le panier, la
+ * tranche de poids se choisit ici par la même fonction que sur le serveur.
  */
-function withTotals(lines: CartView["lines"], base: CartView | null): CartView {
+function withTotals(
+  lines: CartView["lines"],
+  base: CartView | null,
+  method: ShippingMethod | null = base?.shipping.method ?? null,
+): CartView {
   const pricing = base?.discount?.pricing ?? null;
-  const totals = computeTotals({ lines, discount: pricing });
+  const { totals, shipping } = priceCart({
+    lines,
+    discount: pricing,
+    rates: base?.shipping.rates ?? [],
+    method,
+  });
   const discount = base?.discount
     ? {
         ...base.discount,
@@ -95,6 +109,7 @@ function withTotals(lines: CartView["lines"], base: CartView | null): CartView {
     lines: lines.map((l, i) => ({ ...l, lineTotalCents: totals.lines[i].lineTotalCents })),
     itemCount: lines.reduce((n, l) => n + l.qty, 0),
     totals,
+    shipping,
     hasUnavailableLines: lines.some(
       (l) => !l.isPreorder && l.qty > l.availableUnits,
     ),
@@ -205,6 +220,19 @@ export function useRemoveDiscount() {
     mutationFn: async () => unwrap(await removeDiscount({})),
     onMutate: () =>
       optimistic(qc, (cart) => withTotals(cart.lines, { ...cart, discount: null })),
+    onError: (_e, _v, ctx) => {
+      if (ctx?.previous) qc.setQueryData(cartKey, ctx.previous);
+    },
+    onSuccess: (data) => qc.setQueryData(cartKey, data),
+  });
+}
+
+/** Mode de livraison (HEP-70) : le prix change à l'écran avant la réponse. */
+export function useChooseShipping() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { method: ShippingMethod }) => unwrap(await chooseShipping(vars)),
+    onMutate: (vars) => optimistic(qc, (cart) => withTotals(cart.lines, cart, vars.method)),
     onError: (_e, _v, ctx) => {
       if (ctx?.previous) qc.setQueryData(cartKey, ctx.previous);
     },

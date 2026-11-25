@@ -139,16 +139,19 @@ model Batch {
 // --- Panier ----------------------------------------------------------------
 
 model Cart {
-  id           String     @id @default(uuid())
-  token        String     @unique // cookie httpOnly, panier invité
+  id             String          @id @default(uuid())
+  token          String          @unique // cookie httpOnly, panier invité
   // Panier invité tant que null ; rattaché au compte à la connexion (HEP-49).
-  user         User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
-  userId       String?
-  items        CartItem[]
-  discountCode String?
-  expiresAt    DateTime // libère les réservations de stock
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  user           User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId         String?
+  items          CartItem[]
+  discountCode   String?
+  // Mode choisi dans le panier, avant Stripe (HEP-70) : le Checkout hébergé
+  // ne sait pas afficher un sélecteur de point relais.
+  shippingMethod ShippingMethod?
+  expiresAt      DateTime // libère les réservations de stock
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([userId])
   @@index([expiresAt])
@@ -200,6 +203,10 @@ model Order {
   shippingAddress Json
   billingAddress  Json
   discountCode    String?
+  // Figés à la création (HEP-70) : l'étiquette (HEP-69) part du transporteur
+  // payé par le client, pas de la grille du jour.
+  shippingMethod  ShippingMethod?
+  shippingCarrier String?
   internalNote    String?
 
   isPreorder      Boolean   @default(false)
@@ -349,7 +356,12 @@ model ShippingRate {
   priceCents     Int
   freeAboveCents Int?
   active         Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @default(now()) @updatedAt
 
+  // Une tranche par mode et par poids : deux tarifs pour « domicile ≤ 500 g »
+  // laisseraient le hasard de la requête choisir le prix (HEP-70).
+  @@unique([method, maxWeightGrams])
   @@index([active, method, maxWeightGrams])
 }
 

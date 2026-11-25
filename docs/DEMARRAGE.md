@@ -124,6 +124,15 @@ trois fonctions de `src/server/services/discounts.ts`, à ne pas confondre :
 - **paiement confirmé** (`redeemDiscount`, à appeler par le webhook HEP-59) :
   seul endroit où `usedCount` augmente.
 
+Les frais de port (HEP-70) viennent de la grille `ShippingRate`, éditée dans
+`/admin/livraison` et remplie par le seed. Le client choisit son mode **dans
+le panier** (le Checkout Stripe hébergé ne sait pas afficher de point relais) ;
+`createOrder` relit ce mode et le tarif en base, et refuse de créer une
+commande sans mode. Le choix de la tranche est dans `src/lib/shipping.ts`,
+pur, pour que le navigateur et le serveur tombent sur le même prix. Les tests
+qui créent une commande remplacent la grille le temps du fichier
+(`withTestShippingGrid`) et la restaurent ensuite.
+
 ## Les tests
 
 ```bash

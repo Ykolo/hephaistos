@@ -7,6 +7,7 @@ import { useUIStore } from "@/store/ui-store";
 import { useCart } from "@/lib/cart-queries";
 import { formatPriceCompact } from "@/lib/format";
 import { CartLines } from "@/components/cart-lines";
+import { FreeShippingHint, shippingSummary } from "@/components/cart-shipping";
 
 /**
  * Tiroir panier (HEP-50).
@@ -98,11 +99,6 @@ function DrawerContent({ close }: { close: () => void }) {
                       {formatPriceCompact(cart.totals.subtotalCents)}
                     </span>
                   </div>
-                  {/*
-                    Mention obligatoire, et honnêteté commerciale : le total
-                    affiché n'est pas encore le montant à payer — la livraison
-                    manque encore (`totals.shippingKnown` est faux ici).
-                  */}
                   {cart.totals.discountCents > 0 && (
                     <div className="mb-1 flex items-baseline justify-between text-[12.5px]">
                       <span className="text-muted-ink">Remise ({cart.totals.discountCode})</span>
@@ -111,9 +107,22 @@ function DrawerContent({ close }: { close: () => void }) {
                       </span>
                     </div>
                   )}
-                  <p className="m-0 mb-5 text-[11.5px] leading-[1.5] text-muted-ink">
-                    TVA incluse. Frais de livraison calculés à l&apos;étape
-                    suivante.
+                  {cart.totals.shippingKnown && (
+                    <div className="mb-1 flex items-baseline justify-between text-[12.5px]">
+                      <span className="text-muted-ink">Livraison</span>
+                      <span className="tabular-nums">{shippingSummary(cart)}</span>
+                    </div>
+                  )}
+                  <FreeShippingHint cart={cart} className="mt-2" />
+                  {/*
+                    Mention obligatoire, et honnêteté commerciale : tant
+                    qu'aucun mode n'est choisi, le sous-total n'est pas le
+                    montant à payer.
+                  */}
+                  <p className="m-0 mb-5 mt-2 text-[11.5px] leading-[1.5] text-muted-ink">
+                    {cart.totals.shippingKnown
+                      ? "TVA incluse."
+                      : "TVA incluse. Mode de livraison à choisir dans le panier."}
                   </p>
 
                   {cart.hasUnavailableLines && (

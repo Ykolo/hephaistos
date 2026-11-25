@@ -1,6 +1,8 @@
 import type { Tx } from "../db";
 import { ActionError } from "../errors";
 import { computeTotals, type PricingDiscount, type PricingLine, type Totals } from "./pricing";
+import { activeShippingRates } from "./shipping";
+import { priceCart, type CartShipping } from "@/lib/shipping";
 import { availableUnits } from "./stock";
 import {
   checkDiscount,
@@ -357,6 +359,8 @@ export type CartLine = {
   availableUnits: number;
   isPreorder: boolean;
   preorderShipsAt: Date | null;
+  /** Poids unitaire, pour choisir la tranche de port côté navigateur (HEP-70). */
+  weightGrams: number;
 };
 
 /**
@@ -381,11 +385,13 @@ export type CartView = {
    * Montants calculés par le moteur de prix (HEP-47) — la **seule**
    * implémentation, partagée avec Stripe, la commande et la facture.
    *
-   * Aucun mode de livraison n'est fourni à ce stade : `totals.shippingKnown`
-   * vaut `false` et `totals.totalCents` est un total hors livraison. C'est au
-   * tunnel (HEP-58) de repasser par `computeTotals` avec le mode retenu.
+   * Tant que le client n'a pas choisi de mode de livraison,
+   * `totals.shippingKnown` vaut `false` et `totals.totalCents` est un total
+   * hors livraison.
    */
   totals: Totals;
+  /** Modes proposés, mode choisi, franco (HEP-70). */
+  shipping: CartShipping;
   /** Lignes dont la quantité dépasse le stock devenu disponible. */
   hasUnavailableLines: boolean;
   discount: CartDiscount | null;
@@ -410,6 +416,7 @@ export async function getCartView(db: Tx, token: string): Promise<CartView> {
     select: {
       id: true,
       discountCode: true,
+      shippingMethod: true,
       items: {
         orderBy: { id: "asc" },
         select: {
@@ -420,6 +427,7 @@ export async function getCartView(db: Tx, token: string): Promise<CartView> {
               slug: true,
               name: true,
               priceCents: true,
+              weightGrams: true,
               availability: true,
               preorderShipsAt: true,
               images: {
@@ -446,7 +454,14 @@ export async function getCartView(db: Tx, token: string): Promise<CartView> {
   const discount = cart.discountCode
     ? await cartDiscount(db, cart.discountCode, pricingLines)
     : null;
-  const totals = computeTotals({ lines: pricingLines, discount: discount?.pricing ?? null });
+  // La livraison passe par le même chemin que la commande (`priceCart`) : le
+  // port affiché est celui qui sera facturé.
+  const { totals, shipping } = priceCart({
+    lines: cart.items.map((item, i) => ({ ...pricingLines[i], weightGrams: item.product.weightGrams })),
+    discount: discount?.pricing ?? null,
+    rates: await activeShippingRates(db),
+    method: cart.shippingMethod,
+  });
 
   const lines: CartLine[] = [];
   for (const [index, item] of cart.items.entries()) {
@@ -466,6 +481,7 @@ export async function getCartView(db: Tx, token: string): Promise<CartView> {
       availableUnits: units,
       isPreorder: p.availability === "PREORDER",
       preorderShipsAt: p.preorderShipsAt,
+      weightGrams: p.weightGrams,
     });
   }
 
@@ -473,6 +489,7 @@ export async function getCartView(db: Tx, token: string): Promise<CartView> {
     lines,
     itemCount: lines.reduce((n, l) => n + l.qty, 0),
     totals,
+    shipping,
     // La précommande est exclue : son stock est négatif par construction, ce
     // n'est pas une indisponibilité mais un compteur de flacons dus.
     hasUnavailableLines: lines.some(
@@ -573,6 +590,15 @@ export function emptyCartView(): CartView {
     lines: [],
     itemCount: 0,
     totals: computeTotals({ lines: [] }),
+    shipping: {
+      rates: [],
+      method: null,
+      weightGrams: 0,
+      options: [],
+      selected: null,
+      methodUnavailable: false,
+      freeShippingHint: null,
+    },
     hasUnavailableLines: false,
     discount: null,
     notice: null,
