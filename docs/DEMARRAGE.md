@@ -133,6 +133,14 @@ pur, pour que le navigateur et le serveur tombent sur le même prix. Les tests
 qui créent une commande remplacent la grille le temps du fichier
 (`withTestShippingGrid`) et la restaurent ensuite.
 
+Les cookies (HEP-93) : la bannière (`src/components/cookie-banner.tsx`) ne
+charge rien et ne dépose rien avant un clic. Chaque choix écrit une preuve
+dans `ConsentRecord`, puis le cookie `hf_consent` (6 mois, lisible par
+JavaScript : les futurs chargeurs GA4 et Meta le consultent, et écoutent
+l'événement `hf:consent`). Le checkout (HEP-58) devra passer
+`currentConsent(db)` à `createOrder` : le choix est vérifié contre la preuve
+en base — le cookie seul se forge — et recopié sur la commande pour le webhook.
+
 ## Les tests
 
 ```bash

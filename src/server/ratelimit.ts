@@ -30,6 +30,9 @@ export type RateLimitRule = {
 export const RATE_LIMITS = {
   newsletter: { limit: 5, windowSeconds: 10 * 60, by: "ip" },
   contact: { limit: 3, windowSeconds: 10 * 60, by: "ip" },
+  // Chaque choix de cookies écrit une preuve en base (HEP-93) : borné pour
+  // qu'un script ne remplisse pas la table.
+  consent: { limit: 20, windowSeconds: 10 * 60, by: "ip" },
   review: { limit: 2, windowSeconds: 24 * 60 * 60, by: "ip" },
   // Connexion (HEP-62) : deux règles, toutes deux appliquées. Par IP seule,
   // une attaque répartie sur mille adresses contre un même compte passerait

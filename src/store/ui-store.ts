@@ -12,6 +12,8 @@ interface UIState {
   searchOpen: boolean;
   cursorPanelOpen: boolean;
   cursor: CursorMode;
+  /** Bannière cookies rouverte depuis « Gérer mes cookies » (HEP-93). */
+  consentOpen: boolean;
 
   closeAnnounce: () => void;
   openMenu: () => void;
@@ -24,6 +26,8 @@ interface UIState {
   closeCursorPanel: () => void;
   setCursor: (c: CursorMode) => void;
   closeAllOverlays: () => void;
+  openConsent: () => void;
+  closeConsent: () => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -35,6 +39,7 @@ export const useUIStore = create<UIState>()(
       searchOpen: false,
       cursorPanelOpen: false,
       cursor: "ring",
+      consentOpen: false,
 
       closeAnnounce: () => set({ announce: false }),
       openMenu: () => set({ menuOpen: true }),
@@ -49,6 +54,8 @@ export const useUIStore = create<UIState>()(
       setCursor: (c) => set({ cursor: c, cursorPanelOpen: false }),
       closeAllOverlays: () =>
         set({ menuOpen: false, cartOpen: false, searchOpen: false }),
+      openConsent: () => set({ consentOpen: true }),
+      closeConsent: () => set({ consentOpen: false }),
     }),
     {
       name: "hf-ui",

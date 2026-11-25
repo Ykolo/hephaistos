@@ -258,6 +258,12 @@ Il ne crée qu'une commande. C'est garanti dans la base de données, pas
 seulement par un bouton grisé — un bouton grisé ne protège pas d'un
 rechargement de page ni d'une connexion qui rejoue la requête.
 
+### Les cookies
+
+La fiche d'une commande indique ce que le client avait accepté (mesure
+d'audience, marketing) au moment de commander, avec la date et la référence de
+la preuve. Sans choix enregistré, aucune mesure n'est envoyée pour elle.
+
 ### Les mails
 
 Chaque changement d'état déclenche **exactement un mail, jamais deux**. La mise

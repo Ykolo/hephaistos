@@ -8,6 +8,7 @@ import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { MobileMenu } from "@/components/mobile-menu";
 import { CartDrawer } from "@/components/cart-drawer";
+import { CookieBanner } from "@/components/cookie-banner";
 
 import { CustomCursor } from "@/components/custom-cursor";
 import { useUIStore } from "@/store/ui-store";
@@ -60,6 +61,7 @@ export function SiteChrome({
       <MobileMenu />
       <CartDrawer />
       {searchSlot}
+      <CookieBanner />
       <CustomCursor />
     </div>
   );
