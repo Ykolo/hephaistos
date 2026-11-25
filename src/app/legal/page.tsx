@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { Reveal } from "@/components/reveal";
 import { Eyebrow } from "@/components/primitives";
 import { LegalTabs } from "@/components/legal-tabs";
+import { getCompanySettings } from "@/server/company";
+import { cgvSummary, legalMentions } from "@/lib/company";
 
 export const metadata: Metadata = {
   title: "Mentions & conditions | Héphaïstos",
@@ -22,8 +24,17 @@ export default function LegalPage() {
         </h1>
       </Reveal>
       <Suspense>
-        <LegalTabs />
+        <LegalContent />
       </Suspense>
     </section>
   );
+}
+
+/**
+ * Mentions et CGV construites depuis les réglages entreprise (HEP-80), mis en
+ * cache et invalidés à chaque enregistrement dans `/admin/reglages`.
+ */
+async function LegalContent() {
+  const company = await getCompanySettings();
+  return <LegalTabs mentions={legalMentions(company)} cgv={cgvSummary(company)} />;
 }

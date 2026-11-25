@@ -32,8 +32,9 @@ document décrit le **comment** côté dev, et sert de source aux sous-issues.
 | Conversions publicitaires | **Meta CAPI** (serveur) + pixel | L'achat part du webhook Stripe, dédupliqué avec le pixel par `event_id` |
 
 **Shopify et Klaviyo sont abandonnés.** Les issues HEP-14 (webhooks Shopify) et
-HEP-15 (Klaviyo) sont caduques, ainsi que la mention « Hébergement : Shopify Inc. »
-dans `legalContent`.
+HEP-15 (Klaviyo) sont caduques. La mention « Hébergement : Shopify Inc. » a
+disparu avec HEP-80 : mentions légales, CGV et pied de page sont construits
+depuis `CompanySettings` (`src/lib/company.ts`).
 
 > Les briques externes se provisionnent via `vercel integration add <nom>`, pas
 > par un `bun add <sdk>` manuel : c'est ce qui injecte les variables
@@ -431,7 +432,7 @@ le travail, les pièges identifiés et une definition of done.
 | **Panier mixte** (disponible + précommande) : un colis à la date de précommande, ou deux colis ? | Jules | Bloque le lot 3. Recommandation : **un seul colis**, date annoncée avant paiement — deux colis = deux frais de port à absorber |
 | Format SKU définitif et référentiel des lots | Anita | Bloque le schéma produits du lot 2 |
 | Seuil de livraison offerte, grille poids/tarif | Jules | Bloque le lot 7 |
-| Mentions légales réelles : SIRET, capital, TVA intracom, directeur de publication | Jules | Bloque la mise en ligne. `legalContent` annonce aujourd'hui Shopify : **faux** |
+| Mentions légales réelles : SIRET, capital, TVA intracom, directeur de publication | Jules | Bloque la mise en ligne. À saisir dans `/admin/reglages` (HEP-80) ; tant qu'il manque une valeur, le site affiche « à compléter » |
 | ~~Bandeau cookies~~ **tranché** | Bannière obligatoire | GA4 + Meta rendent l'exemption impossible. Pour l'éviter, il faudrait renoncer aux deux et s'en tenir à Vercel Analytics — arbitrage acquisition contre simplicité, à confirmer par Jules (HEP-91) |
 | Comptes clients : au lancement ou après ? | Jules | HEP-27 dit oui ; le checkout invité reste obligatoire dans les deux cas |
 

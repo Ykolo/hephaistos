@@ -5,6 +5,7 @@ import { Providers } from "@/components/providers";
 import { SiteChrome } from "@/components/site-chrome";
 import { Suspense } from "react";
 import { SearchOverlayData } from "@/components/search-overlay-data";
+import { FooterCompany } from "@/components/footer-company";
 
 const newsreader = Newsreader({
   variable: "--font-newsreader",
@@ -43,6 +44,11 @@ export default function RootLayout({
             searchSlot={
               <Suspense fallback={null}>
                 <SearchOverlayData />
+              </Suspense>
+            }
+            companySlot={
+              <Suspense fallback={<span>Héphaïstos Paris</span>}>
+                <FooterCompany />
               </Suspense>
             }
           >

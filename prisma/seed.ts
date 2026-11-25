@@ -227,17 +227,17 @@ async function main() {
   );
 
   // Réglages entreprise : une seule ligne, alimente factures et mentions
-  // légales (HEP-80). Les valeurs réelles (SIRET, TVA, capital) sont encore
-  // attendues de Jules — cf. docs/BACKEND.md §6.
+  // légales (HEP-80), modifiable dans /admin/reglages. SIRET, TVA, capital,
+  // RCS et directeur de publication restent vides tant que Jules ne les a pas
+  // fournis : le site affiche « à compléter », jamais une valeur inventée.
+  // `update: {}` : relancer le seed n'écrase pas ce qui a été saisi.
   await db.companySettings.upsert({
     where: { id: "singleton" },
     update: {},
     create: {
       id: "singleton",
       legalName: "Héphaïstos Paris",
-      address: { line1: "À compléter", postalCode: "", city: "Paris", country: "FR" },
-      siret: "PROVISIONAL",
-      vatNumber: "PROVISIONAL",
+      address: { line1: "", postalCode: "", city: "Paris", country: "FR" },
       contactEmail: "contact@hephaistosparis.com",
     },
   });
