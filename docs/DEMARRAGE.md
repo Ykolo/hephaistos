@@ -289,7 +289,10 @@ dans `src/server/services/README.md`.
 
 Toutes leurs clés peuvent rester vides en local :
 
-- **Resend** : sans clé, les emails s'affichent dans la console ;
+- **Resend** : sans clé, les emails s'affichent dans la console — y compris
+  la notification et l'accusé de réception du formulaire de contact (HEP-89),
+  envoyés **après** la réponse (`after`) ; `CONTACT_INBOX_EMAIL` désigne la
+  boîte qui reçoit les messages ;
 - **Upstash** : sans clé, les quotas tombent sur un repli en mémoire ;
 - **Sentry** : sans DSN, rien n'est envoyé ;
 - **Stripe** : seul le lien vers le paiement de la fiche commande l'utilise
