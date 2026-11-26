@@ -36,7 +36,7 @@ export const legalContent: Record<LegalKey, { t: string; b: string }> = {
   },
   cookies: {
     t: "Gestion des cookies",
-    b: "Le site utilise des cookies nécessaires à son fonctionnement et, sous réserve de votre consentement, des cookies de mesure d'audience et marketing. Vous pouvez gérer vos préférences à tout moment depuis le bandeau dédié.",
+    b: "Le site utilise des cookies nécessaires à son fonctionnement — ils ne demandent pas votre accord — et, seulement si vous l'acceptez, des cookies de mesure d'audience et de marketing. Aucun de ces derniers n'est déposé avant votre choix ; fermer la bannière vaut refus. Votre choix est conservé 6 mois, puis redemandé. Nous gardons une preuve de chaque choix (date, catégories, version de la bannière) sans conserver votre adresse IP en clair. Vous pouvez changer d'avis à tout moment.",
   },
   retour: {
     t: "Retours & remboursements",

@@ -216,6 +216,26 @@ async function OrderDetail({ searchParams }: { searchParams: SearchParams }) {
             )}
           </section>
 
+          {/* Preuve du consentement aux cookies au checkout (HEP-93). */}
+          <section>
+            <h2 className={heading}>Cookies</h2>
+            {order.consentRecordId ? (
+              <p className="m-0 text-[13px] leading-[1.7]">
+                Mesure d&apos;audience : {order.consentAnalytics ? "acceptée" : "refusée"} · Marketing :{" "}
+                {order.consentMarketing ? "accepté" : "refusé"}
+                <br />
+                <span className="text-[12px] text-muted-ink">
+                  Choix du {order.consentAt ? dateTime.format(order.consentAt) : "—"} · preuve{" "}
+                  <span className="font-mono">{order.consentRecordId}</span>
+                </span>
+              </p>
+            ) : (
+              <p className="m-0 text-[13px] text-muted-ink">
+                Aucun choix enregistré : aucune mesure n&apos;est envoyée pour cette commande.
+              </p>
+            )}
+          </section>
+
           <section>
             <h2 className={heading}>Expéditions</h2>
             {order.shipments.length === 0 ? (

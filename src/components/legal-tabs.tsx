@@ -3,6 +3,8 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { legalContent, legalTabs, type LegalKey } from "@/lib/content";
 import type { LegalRow } from "@/lib/company";
+import { CATEGORY_LABELS, TRACKERS } from "@/lib/consent";
+import { ManageCookiesButton } from "@/components/cookie-banner";
 import { cn } from "@/lib/utils";
 
 const keys = legalTabs.map((t) => t.key);
@@ -62,6 +64,37 @@ export function LegalTabs({ mentions, cgv }: { mentions: LegalRow[]; cgv: string
           <p className="m-0 mb-5 text-[15px] leading-[1.9] text-body">
             {active === "cgv" ? cgv : content.b}
           </p>
+        )}
+
+        {active === "cookies" && (
+          <>
+            <div className="mb-5 overflow-x-auto">
+              <table className="w-full border-collapse text-[13px]">
+                <caption className="sr-only">Liste des cookies et traceurs</caption>
+                <thead>
+                  <tr className="border-b border-line text-left text-[11px] uppercase tracking-[.12em] text-muted-ink">
+                    <th className="py-2 pr-4 font-medium">Nom</th>
+                    <th className="py-2 pr-4 font-medium">Catégorie</th>
+                    <th className="py-2 pr-4 font-medium">Finalité</th>
+                    <th className="py-2 pr-4 font-medium">Durée</th>
+                    <th className="py-2 font-medium">Émetteur</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {TRACKERS.map((t) => (
+                    <tr key={t.name} className="border-b border-line-soft align-top">
+                      <td className="py-2 pr-4 font-mono text-[12px]">{t.name}</td>
+                      <td className="py-2 pr-4">{CATEGORY_LABELS[t.category]}</td>
+                      <td className="py-2 pr-4">{t.purpose}</td>
+                      <td className="whitespace-nowrap py-2 pr-4">{t.duration}</td>
+                      <td className="py-2">{t.provider}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <ManageCookiesButton className="cursor-pointer border border-ink bg-ink px-6 py-3 text-[11px] font-semibold uppercase tracking-[.14em] text-white transition-colors hover:bg-paper hover:text-ink" />
+          </>
         )}
 
         {active !== "mentions" && (

@@ -7,6 +7,7 @@ import { computeTotals, type Totals } from "./pricing";
 import { claimDiscountForOrder } from "./discounts";
 import { shippingForOrder } from "./shipping";
 import { currentVatRate } from "./company";
+import type { ConsentSnapshot } from "./consent";
 import type { Address } from "@/lib/validation/address";
 
 /**
@@ -49,6 +50,12 @@ export type CreateOrderInput = {
   /** Compte client, quand il y en a un (HEP-62). */
   userId?: string;
   vatRateBps?: number;
+  /**
+   * Consentement aux cookies au moment du checkout (HEP-93), déjà vérifié
+   * contre sa preuve en base (`currentConsent`). Absent = aucun : la mesure
+   * serveur ne partira pas.
+   */
+  consent?: ConsentSnapshot;
 };
 
 /** Ligne de commande figée. */
@@ -210,6 +217,11 @@ export async function createOrder(
       discountCode: totals.discountCode,
       shippingMethod: shipping.method,
       shippingCarrier: shipping.carrier,
+
+      consentAnalytics: input.consent?.analytics ?? false,
+      consentMarketing: input.consent?.marketing ?? false,
+      consentAt: input.consent?.at ?? null,
+      consentRecordId: input.consent?.recordId ?? null,
 
       // Copiées, pas référencées : voir `src/lib/validation/address.ts`.
       shippingAddress: input.shippingAddress,

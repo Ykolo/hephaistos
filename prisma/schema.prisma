@@ -219,6 +219,10 @@ model Order {
   // conversions des premières ventes.
   consentMarketing Boolean   @default(false)
   consentAnalytics Boolean   @default(false)
+  // Le choix recopié au checkout, et la preuve qui le fonde (HEP-93) : le
+  // webhook Stripe n'a pas accès au cookie de consentement.
+  consentAt        DateTime?
+  consentRecordId  String?
   fbp              String?
   fbc              String?
   clientIpHash     String? // SHA-256 salé, jamais l'IP brute
@@ -616,6 +620,24 @@ model CompanySettings {
   hostName            String   @default("Vercel Inc.")
   hostAddress         String   @default("440 N Barranca Ave #4133, Covina, CA 91723, États-Unis")
   updatedAt           DateTime @default(now()) @updatedAt
+}
+
+/// Preuve d'un choix de cookies (HEP-93). Une ligne par clic, jamais
+/// modifiée : retirer son consentement ajoute une ligne, n'efface pas la
+/// précédente. `consentId` est l'identifiant posé dans le cookie
+/// `hf_consent` ; il relie les choix successifs d'un même navigateur.
+model ConsentRecord {
+  id        String   @id @default(uuid())
+  consentId String
+  version   Int
+  analytics Boolean
+  marketing Boolean
+  action    String // accept_all | reject_all | custom | dismiss
+  ipHash    String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([consentId, createdAt])
 }
 
 model AuditLog {

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { routes } from "@/lib/routes";
+import { ManageCookiesButton } from "@/components/cookie-banner";
 
 const linkCls =
   "cursor-pointer bg-transparent text-left text-[13.5px] text-dust transition-colors hover:text-white";
@@ -77,6 +78,9 @@ export function Footer({ companySlot }: { companySlot: React.ReactNode }) {
               <Link href={`${routes.legal}?tab=retour`} className={linkCls}>
                 Retours
               </Link>
+              {/* Permanent (HEP-93) : retirer son consentement doit être
+                  aussi facile que l'avoir donné. */}
+              <ManageCookiesButton className={linkCls} />
             </div>
           </div>
         </div>
