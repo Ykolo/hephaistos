@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { routes, mainNav } from "@/lib/routes";
+import { accountRoutes, routes, mainNav } from "@/lib/routes";
 import { useUIStore } from "@/store/ui-store";
 import { CartBadge } from "@/components/cart-badge";
 
@@ -113,6 +113,20 @@ export function Header() {
               <line x1="16.5" y1="16.5" x2="21" y2="21" />
             </svg>
           </button>
+          <Link href={accountRoutes.home} aria-label="Mon compte" className="flex p-1">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#141414"
+              strokeWidth="1.4"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
+            </svg>
+          </Link>
           <CartBadge onOpen={openCart} />
         </div>
       </div>

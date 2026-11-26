@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { submitWith } from "@/components/account/fields";
 import { authClient } from "@/lib/auth-client";
 import { adminRoutes } from "@/lib/routes";
 
@@ -55,7 +56,7 @@ export function TwoFactorSetup() {
 
   if (!enrollment) {
     return (
-      <form action={start} className="grid gap-4 text-[14px] leading-[1.7] text-body">
+      <form onSubmit={submitWith(start)} className="grid gap-4 text-[14px] leading-[1.7] text-body">
         <p className="m-0">
           L&apos;administration exige un code à usage unique en plus du mot de passe. Installez une
           application d&apos;authentification (1Password, Google Authenticator, Authy…), puis
@@ -74,7 +75,7 @@ export function TwoFactorSetup() {
   }
 
   return (
-    <form action={confirm} className="grid gap-5 text-[14px] leading-[1.7] text-body">
+    <form onSubmit={submitWith(confirm)} className="grid gap-5 text-[14px] leading-[1.7] text-body">
       <div>
         <p className="m-0 mb-3">1. Scannez ce QR code avec votre application.</p>
         {/* eslint-disable-next-line @next/next/no-img-element -- data URL générée localement */}

@@ -11,6 +11,15 @@ export const routes = {
   legal: "/legal",
 } as const;
 
+/** Compte client (HEP-63). Hors sitemap, `noindex` sur chaque page. */
+export const accountRoutes = {
+  signIn: "/connexion",
+  signUp: "/inscription",
+  forgotPassword: "/mot-de-passe-oublie",
+  resetPassword: "/reinitialiser",
+  home: "/compte",
+} as const;
+
 /**
  * Commandes en administration (HEP-56).
  *

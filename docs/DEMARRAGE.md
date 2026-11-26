@@ -96,6 +96,23 @@ bun run dev        # http://localhost:3000
 Dix routes publiques : `/`, `/boutique`, `/produit/[id]`, `/panier`,
 `/histoire`, `/vision`, `/avis`, `/contact`, `/newsletter`, `/legal`.
 
+Et le compte client (HEP-63), en `noindex` : `/connexion`, `/inscription`,
+`/mot-de-passe-oublie`, `/reinitialiser`, `/compte`. Sans clé Resend, les
+liens de confirmation et de réinitialisation s'affichent dans la console du
+serveur de dev.
+
+Deux règles à ne pas casser :
+
+- **les commandes passées sans compte** rejoignent le compte qui a la même
+  adresse, mais seulement une fois l'adresse **vérifiée**
+  (`attachGuestOrders`). Sans cette barrière, n'importe qui lirait
+  l'historique d'un client en s'inscrivant avec son email ;
+- **à la connexion, le panier invité fusionne** avec celui du compte
+  (`mergeCartsOnSignIn`, HEP-49) : quantité = max des deux, jamais la somme,
+  et le cookie de panier change de jeton. Le tout passe par un seul hook
+  (`afterSessionHook` dans `src/server/auth.ts`), quel que soit le chemin qui
+  ouvre la session.
+
 ## Les tests
 
 ```bash
@@ -248,8 +265,13 @@ Prisma en premier argument et ne lit jamais de cookie, de header ni de session.
 Lire la session est le travail de la Server Action appelante. Le détail est
 dans `src/server/services/README.md`.
 
-## Ce qui n'est pas encore branché
+## Les services tiers en local
 
-Stripe, Resend, Sendcloud, Better Auth, Upstash et Sentry ont leurs clés dans
-`.env.example` mais **aucun code ne les appelle encore**. Les laisser vides
-n'empêche rien de tourner.
+Toutes leurs clés peuvent rester vides en local :
+
+- **Resend** : sans clé, les emails s'affichent dans la console ;
+- **Upstash** : sans clé, les quotas tombent sur un repli en mémoire ;
+- **Sentry** : sans DSN, rien n'est envoyé ;
+- **Stripe** : seul le lien vers le paiement de la fiche commande l'utilise
+  aujourd'hui ; le tunnel de paiement arrive avec HEP-58 ;
+- **Sendcloud** : aucun code ne l'appelle encore (HEP-69).

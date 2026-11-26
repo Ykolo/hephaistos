@@ -15,11 +15,11 @@ import { CART_TTL_DAYS } from "./services/cart";
 export const CART_COOKIE = "hep_cart";
 
 /** 32 octets d'entropie : impossible à deviner ou à énumérer. */
-function newToken(): string {
+export function newCartToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
-const cookieOptions = {
+export const cartCookieOptions = {
   httpOnly: true, // invisible pour JavaScript : rien à voler par XSS
   sameSite: "lax" as const, // survit à un retour depuis Stripe, bloque le CSRF
   secure: process.env.NODE_ENV === "production", // http en local, sinon absent
@@ -50,12 +50,12 @@ export async function requireCartToken(): Promise<string> {
   if (existing) {
     // Réécrit à chaque interaction : le panier repart pour 30 jours plutôt
     // que d'expirer 30 jours après la première visite.
-    store.set(CART_COOKIE, existing, cookieOptions);
+    store.set(CART_COOKIE, existing, cartCookieOptions);
     return existing;
   }
 
-  const token = newToken();
-  store.set(CART_COOKIE, token, cookieOptions);
+  const token = newCartToken();
+  store.set(CART_COOKIE, token, cartCookieOptions);
   return token;
 }
 
