@@ -5,12 +5,14 @@ import { Eyebrow } from "@/components/primitives";
 import { LegalTabs } from "@/components/legal-tabs";
 import { getCompanySettings } from "@/server/company";
 import { cgvSummary, legalMentions } from "@/lib/company";
+import { pageMetadata } from "@/lib/metadata";
 
-export const metadata: Metadata = {
-  title: "Mentions & conditions | Héphaïstos",
+export const metadata: Metadata = pageMetadata({
+  title: "Mentions & conditions",
   description:
     "Mentions légales, CGV, confidentialité, cookies et retours d'Héphaïstos Paris.",
-};
+  path: "/legal",
+});
 
 export default function LegalPage() {
   return (

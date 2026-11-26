@@ -4,7 +4,7 @@ import { Eyebrow } from "@/components/primitives";
 import { CartPageContent } from "@/components/cart-page-content";
 
 export const metadata: Metadata = {
-  title: "Votre panier | Héphaïstos",
+  title: "Votre panier",
   description: "Les soins sélectionnés avant de finaliser votre commande.",
   // Une page de panier n'a rien à faire dans un index : son contenu est propre
   // à chaque visiteur et n'a aucune valeur de référencement.

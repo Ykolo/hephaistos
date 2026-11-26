@@ -3,12 +3,14 @@ import { Reveal } from "@/components/reveal";
 import { ContactForm } from "@/components/contact-form";
 import { Eyebrow } from "@/components/primitives";
 import { CONTACT_REPLY_DELAY } from "@/server/services/messages";
+import { pageMetadata } from "@/lib/metadata";
 
-export const metadata: Metadata = {
-  title: "Contact | Héphaïstos",
+export const metadata: Metadata = pageMetadata({
+  title: "Contact",
   description:
     "Une question sur les produits, une commande, un partenariat ? Écris-nous.",
-};
+  path: "/contact",
+});
 
 export default function ContactPage() {
   return (

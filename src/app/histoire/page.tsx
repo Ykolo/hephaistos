@@ -3,12 +3,14 @@ import { CoverImage } from "@/components/cover-image";
 import { Reveal } from "@/components/reveal";
 import { NewsletterBand } from "@/components/newsletter-band";
 import { heroImages } from "@/lib/content";
+import { pageMetadata } from "@/lib/metadata";
 
-export const metadata: Metadata = {
-  title: "L'histoire — Le feu qui forge l'acier | Héphaïstos",
+export const metadata: Metadata = pageMetadata({
+  title: "L'histoire — Le feu qui forge l'acier",
   description:
     "Héphaïstos, dieu de la forge. La discipline d'un geste quotidien, pensée pour la peau masculine.",
-};
+  path: "/histoire",
+});
 
 const pillars = [
   {
