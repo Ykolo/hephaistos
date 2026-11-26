@@ -49,6 +49,7 @@ commande, lot…).
 | **Rappel produit**  | Retrouver qui a reçu un lot donné                   |
 | **Codes promo**     | Créer, suspendre, suivre les utilisations           |
 | **Livraison**       | Changer un tarif de port, le seuil d'offre          |
+| **Messages**        | Les messages du formulaire de contact               |
 | **Journal**         | Voir qui a modifié quoi, et quand                   |
 | **Sécurité**        | État de la double authentification                  |
 
@@ -283,6 +284,28 @@ L'écran **Livraison** contient la grille des frais de port : une ligne par
   passée garde le port qu'elle a payé.
 
 Chaque changement est inscrit au journal.
+
+---
+
+## Les messages
+
+Chaque message du formulaire de contact arrive **à deux endroits** : dans
+l'écran **Messages**, et par mail dans la boîte contact. Le mail n'est qu'une
+alerte ; l'écran fait foi — si un mail se perd, le message est là quand même.
+
+- Pour répondre, **réponds au mail de notification** : la réponse part chez le
+  client, pas chez toi. Depuis l'écran, le lien sur son adresse ouvre aussi un
+  mail prêt à écrire.
+- Ouvrir un message nouveau le marque **lu**. Marque-le **répondu** une fois
+  fait, **archive**-le quand l'échange est clos.
+- Le **spam** s'écarte de la liste mais ne s'efface pas. « Tous » le cache ;
+  l'onglet Spam le montre.
+- Le client reçoit un accusé de réception qui annonce une réponse **sous
+  48 heures ouvrées**. Si ce délai change, il faut un développeur (et la page
+  contact suit automatiquement).
+
+Le formulaire bloque les robots (piège invisible, BotID), refuse plus de 3
+liens, et n'accepte que 3 envois par 10 minutes depuis une même adresse.
 
 ---
 

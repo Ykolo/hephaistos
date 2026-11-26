@@ -1,20 +1,28 @@
 "use server";
 
+import { after } from "next/server";
 import { contactSchema } from "@/lib/validation/contact";
 import { ActionError } from "../errors";
 import { formAction } from "../action";
 import { RATE_LIMITS } from "../ratelimit";
+import { db } from "../db";
+import { currentIpHash } from "../ip";
+import {
+  CONTACT_REPLY_DELAY,
+  notifyContactMessage,
+  storeContactMessage,
+} from "../services/messages";
 
 /**
- * Envoi du formulaire de contact.
+ * Envoi du formulaire de contact (HEP-89).
  *
- * Périmètre HEP-34 : démontrer le socle de bout en bout — validation Zod,
- * messages français, erreurs rendues au bon champ, contrat de retour unique.
+ * Dans l'ordre : BotID, quota (3 envois / 10 min / IP), schéma (longueurs,
+ * nombre de liens, piège à robots) — c'est le helper `formAction` — puis
+ * **stockage**, puis notification.
  *
- * ⚠️ Le message n'est **pas encore persisté**. Le stockage dans `Message`, la
- * notification par Resend sont le contenu de HEP-89 (BotID, le quota et le
- * piège à robots sont en place depuis HEP-35) ; tant qu'il n'est pas fait, ce formulaire valide correctement mais
- * n'achemine rien. Il ne doit pas partir en production dans cet état.
+ * Les mails partent après la réponse (`after`) : le visiteur n'attend pas
+ * Resend, et un échec d'envoi ne lui est jamais montré — son message est
+ * déjà en base, il n'a rien à refaire.
  */
 export const submitContact = formAction(
   contactSchema,
@@ -26,8 +34,10 @@ export const submitContact = formAction(
       throw new ActionError("BOT_DETECTED", "Requête refusée.");
     }
 
-    // TODO(HEP-89) : db.message.create(...) puis notification Resend.
-    return { received: true, email: input.email };
+    const stored = await storeContactMessage(db, input, { ipHash: await currentIpHash() });
+    after(() => notifyContactMessage(stored));
+
+    return { received: true, replyDelay: CONTACT_REPLY_DELAY };
   },
   {
     name: "contact.submit",

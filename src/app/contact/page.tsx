@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Reveal } from "@/components/reveal";
 import { ContactForm } from "@/components/contact-form";
 import { Eyebrow } from "@/components/primitives";
+import { CONTACT_REPLY_DELAY } from "@/server/services/messages";
 
 export const metadata: Metadata = {
   title: "Contact | Héphaïstos",
@@ -19,7 +20,7 @@ export default function ContactPage() {
         </h1>
         <p className="m-0 mb-10 max-w-[38ch] text-[15px] leading-[1.75] text-body">
           Une question sur les produits, une commande, un partenariat ? On
-          répond sous 24 à 48h ouvrées.
+          répond {CONTACT_REPLY_DELAY}.
         </p>
         <div className="flex flex-col gap-[22px]">
           <div>

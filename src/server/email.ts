@@ -22,6 +22,12 @@ export type EmailMessage = {
   subject: string;
   text: string;
   html: string;
+  /**
+   * Adresse à laquelle « Répondre » écrit. Pour la notification de contact
+   * (HEP-89), c'est le client : la marque lui répond depuis sa boîte, sans
+   * recopier l'adresse.
+   */
+  replyTo?: string;
 };
 
 const outbox: EmailMessage[] = [];
@@ -59,6 +65,7 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
       subject: message.subject,
       text: message.text,
       html: message.html,
+      ...(message.replyTo ? { reply_to: message.replyTo } : {}),
     }),
   });
 

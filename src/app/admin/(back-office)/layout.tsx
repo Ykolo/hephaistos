@@ -3,6 +3,8 @@ import Link from "next/link";
 import { SignOutButton } from "@/components/admin/sign-out-button";
 import { adminRoutes } from "@/lib/routes";
 import { requireAdminPage } from "@/server/admin-guard";
+import { db } from "@/server/db";
+import { countNewMessages } from "@/server/services/messages";
 
 /**
  * Back-office (HEP-78) : tout ce qui est sous ce groupe exige un admin
@@ -25,6 +27,7 @@ export default function BackOfficeLayout({ children }: { children: React.ReactNo
 
 async function AdminGate({ children }: { children: React.ReactNode }) {
   const session = await requireAdminPage();
+  const newMessages = await countNewMessages(db);
 
   return (
     <>
@@ -55,6 +58,15 @@ async function AdminGate({ children }: { children: React.ReactNode }) {
           </Link>
           <Link href="/admin/livraison" className="underline underline-offset-4">
             Livraison
+          </Link>
+          <Link href="/admin/messages" className="underline underline-offset-4">
+            Messages
+            {newMessages > 0 && (
+              <span className="ml-1 font-semibold">
+                ({newMessages}
+                <span className="sr-only"> non lus</span>)
+              </span>
+            )}
           </Link>
           <Link href={adminRoutes.auditLog} className="underline underline-offset-4">
             Journal
