@@ -18,6 +18,7 @@ import { ipHashFromHeaders } from "./ip";
 import { consumeRateLimit, RATE_LIMITS, type RateLimitRule } from "./ratelimit";
 import { attachGuestOrders } from "./services/account";
 import { mergeCartsOnSignIn } from "./services/cart-merge";
+import { siteOrigin, vercelOrigins } from "./site-url";
 
 /**
  * Authentification (HEP-62) — un seul socle pour les clients et l'admin.
@@ -37,21 +38,10 @@ import { mergeCartsOnSignIn } from "./services/cart-merge";
 const THIRTY_DAYS = 60 * 60 * 24 * 30;
 const ONE_DAY = 60 * 60 * 24;
 
-function vercelOrigins(): string[] {
-  return [
-    process.env.VERCEL_URL,
-    process.env.VERCEL_BRANCH_URL,
-    process.env.VERCEL_PROJECT_PRODUCTION_URL,
-  ]
-    .filter((host): host is string => Boolean(host))
-    .map((host) => `https://${host}`);
-}
-
-// Dernier recours : l'origine publique du site. Sans aucune origine, Better
-// Auth écrit des liens relatifs dans les emails — inutilisables hors du site,
-// et c'est ce qui arrive en CI, où ni BETTER_AUTH_URL ni VERCEL_URL n'existent.
-const baseURL =
-  process.env.BETTER_AUTH_URL || vercelOrigins()[0] || process.env.NEXT_PUBLIC_SITE_URL;
+// Origine publique : même calcul que les autres emails du site
+// (`site-url.ts`). Sans aucune origine, Better Auth écrirait des liens
+// relatifs, inutilisables hors du site.
+const baseURL = siteOrigin();
 
 // --- Emails ----------------------------------------------------------------
 
