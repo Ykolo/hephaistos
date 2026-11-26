@@ -141,6 +141,14 @@ l'événement `hf:consent`). Le checkout (HEP-58) devra passer
 `currentConsent(db)` à `createOrder` : le choix est vérifié contre la preuve
 en base — le cookie seul se forge — et recopié sur la commande pour le webhook.
 
+La newsletter (HEP-67) est en double opt-in : le formulaire crée une
+inscription `PENDING` et envoie un lien (dans la console sans Resend) ; seul
+le clic la passe en `CONFIRMED`. Le formulaire poste sur
+`/api/newsletter/subscribe` et non sur une Server Action : il est sur presque
+toutes les pages, et c'est la seule URL déclarée à BotID. Un second cron
+quotidien (`/api/cron/newsletter`) efface les inscriptions jamais confirmées
+au bout de 30 jours.
+
 ## Les tests
 
 ```bash
@@ -203,7 +211,8 @@ Le mode d'emploi des pages est dans [`BACK-OFFICE.md`](./BACK-OFFICE.md).
 n'importe qui pourrait le déclencher en boucle et vider le panier de clients en
 cours d'achat. En local, la route répond sans secret.
 
-**Un cron Vercel l'appelle une fois par jour**, à 4 h — et pas davantage, pour
+**Un cron Vercel l'appelle une fois par jour**, à 4 h (et un second, à 4 h 30,
+purge les inscriptions newsletter jamais confirmées) — et pas davantage, pour
 la raison exposée au quatrième piège ci-dessous.
 
 Le quotidien suffit, et ce n'est pas un pis-aller. Contrairement à ce que son

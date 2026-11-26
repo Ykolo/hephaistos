@@ -62,7 +62,12 @@ export const config: VercelConfig = {
    * 4 h du matin : le creux de trafic. Sur Hobby, la précision est de ±59 min,
    * ce qui est sans importance ici.
    */
-  crons: [{ path: "/api/cron/reservations", schedule: "0 4 * * *" }],
+  crons: [
+    { path: "/api/cron/reservations", schedule: "0 4 * * *" },
+    // Purge des inscriptions newsletter jamais confirmées (HEP-67). Quotidien,
+    // comme l'autre : c'est la seule cadence que le plan Hobby accepte.
+    { path: "/api/cron/newsletter", schedule: "30 4 * * *" },
+  ],
 
   headers: [
     {

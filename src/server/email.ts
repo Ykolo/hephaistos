@@ -28,6 +28,8 @@ export type EmailMessage = {
    * recopier l'adresse.
    */
   replyTo?: string;
+  /** En-têtes supplémentaires, par exemple `List-Unsubscribe` (HEP-67). */
+  headers?: Record<string, string>;
 };
 
 const outbox: EmailMessage[] = [];
@@ -66,6 +68,7 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
       text: message.text,
       html: message.html,
       ...(message.replyTo ? { reply_to: message.replyTo } : {}),
+      ...(message.headers ? { headers: message.headers } : {}),
     }),
   });
 

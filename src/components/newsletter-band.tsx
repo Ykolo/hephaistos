@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
 import { Reveal } from "@/components/reveal";
+import { NewsletterForm } from "@/components/newsletter-form";
+import type { NewsletterSource } from "@/server/services/newsletter";
 
-/** Port of HfNewsletter — the beige opt-in band reused across pages. */
-export function NewsletterBand() {
-  const [sent, setSent] = useState(false);
-
+/**
+ * Bandeau d'inscription repris sur la plupart des pages (HEP-67).
+ *
+ * `source` dit d'où vient l'inscription : c'est ce qui permet de savoir quel
+ * emplacement convertit.
+ */
+export function NewsletterBand({ source = "band" }: { source?: NewsletterSource }) {
   return (
     <section className="bg-sand px-6 py-[clamp(70px,11vw,150px)] text-center sm:px-14">
       <div className="mx-auto max-w-[560px]">
@@ -27,34 +31,7 @@ export function NewsletterBand() {
           recevoir une offre réservée à la liste.
         </Reveal>
 
-        {sent ? (
-          <Reveal className="font-serif text-[1.4rem] text-ink">
-            Tu es sur la liste. ✦
-          </Reveal>
-        ) : (
-          <Reveal>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setSent(true);
-              }}
-              className="mx-auto flex max-w-[440px] border-b border-ink"
-            >
-              <input
-                type="email"
-                required
-                placeholder="Ton adresse email"
-                className="flex-1 bg-transparent px-1 py-4 text-[15px] text-ink outline-none"
-              />
-              <button
-                type="submit"
-                className="cursor-pointer bg-transparent px-2 text-[11.5px] font-semibold uppercase tracking-[.18em] text-ink"
-              >
-                M&apos;inscrire →
-              </button>
-            </form>
-          </Reveal>
-        )}
+        <NewsletterForm source={source} tone="light" />
 
         <Reveal className="mt-[18px] text-[11px] tracking-[.04em] text-[#a3a09a]">
           Pas de spam. Désinscription en un clic.

@@ -52,7 +52,7 @@ export type ContactInput = z.infer<typeof contactSchema>;
 /** Inscription newsletter — double opt-in côté serveur (HEP-67). */
 export const newsletterSchema = z.object({
   email: emailSchema,
-  source: z.enum(["band", "hero", "produit", "checkout"]).optional(),
+  source: z.enum(["band", "hero", "produit", "menu", "checkout"]).optional(),
   website: honeypotSchema,
 });
 
