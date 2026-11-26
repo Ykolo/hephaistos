@@ -8,7 +8,7 @@ import {
 import { formAction, action } from "../action";
 import { db } from "../db";
 import { invalidateCatalog } from "../catalog";
-import { guardAdminAction, PROVISIONAL_ACTOR_ID } from "../admin-guard";
+import { requireAdminAction } from "../admin-guard";
 import {
   reorderProducts,
   setBundleComposition,
@@ -19,7 +19,7 @@ import { ActionError } from "../errors";
 /**
  * Écritures du catalogue depuis l'administration (HEP-39).
  *
- * Chaque action commence par `guardAdminAction()` : une Server Action est un
+ * Chaque action commence par `requireAdminAction()` : une Server Action est un
  * point d'entrée réseau appelable directement, la garde posée sur la page ne
  * la protège pas.
  *
@@ -30,7 +30,7 @@ import { ActionError } from "../errors";
 export const saveProduct = formAction(
   productFormSchema,
   async (input) => {
-    guardAdminAction();
+    const { actorId } = await requireAdminAction();
 
     // Le slug est l'URL publique du produit : le changer casse les liens
     // existants et les positions acquises en référencement. On l'autorise à
@@ -63,7 +63,7 @@ export const saveProduct = formAction(
           : null,
     };
 
-    const result = await upsertProduct(db, data, PROVISIONAL_ACTOR_ID);
+    const result = await upsertProduct(db, data, actorId);
 
     invalidateCatalog(input.slug);
 
@@ -81,8 +81,8 @@ export const saveProduct = formAction(
 export const saveBundleComposition = action(
   bundleCompositionSchema,
   async ({ bundleSlug, components }) => {
-    guardAdminAction();
-    await setBundleComposition(db, bundleSlug, components, PROVISIONAL_ACTOR_ID);
+    const { actorId } = await requireAdminAction();
+    await setBundleComposition(db, bundleSlug, components, actorId);
 
     // La disponibilité du coffret dépend de ses composants : changer la
     // composition change ce que le site doit afficher.
@@ -96,8 +96,8 @@ export const saveBundleComposition = action(
 export const reorder = action(
   reorderSchema,
   async ({ slugs }) => {
-    guardAdminAction();
-    await reorderProducts(db, slugs, PROVISIONAL_ACTOR_ID);
+    const { actorId } = await requireAdminAction();
+    await reorderProducts(db, slugs, actorId);
     invalidateCatalog();
     return { count: slugs.length };
   },

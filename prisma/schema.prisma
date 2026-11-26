@@ -445,6 +445,11 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
 
+  // Héphaïstos — dernière requête d'administration (HEP-78), pour couper une
+  // session admin restée ouverte sans activité. Distinct de `updatedAt`, que
+  // Better Auth ne touche qu'une fois par jour.
+  lastActiveAt DateTime?
+
   @@index([userId])
 }
 

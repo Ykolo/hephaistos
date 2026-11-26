@@ -2,18 +2,39 @@
 
 Guide non technique de l'administration d'Héphaïstos.
 
-> ## ⚠️ Le back-office n'est pas encore utilisable au quotidien
->
-> Il n'a **pas d'écran de connexion**. Aujourd'hui il ne s'ouvre que sur
-> l'ordinateur de développement, jamais depuis internet. Ce n'est pas un
-> oubli : livrer un back-office sans mot de passe reviendrait à laisser
-> n'importe qui changer les prix et le stock de la boutique.
->
-> La connexion sécurisée (mot de passe + double authentification) est prévue,
-> et c'est elle qui débloquera l'accès depuis le web.
->
-> **Ce document décrit ce qui existe déjà.** Il grandira avec le
-> back-office. Ce qui manque encore est listé à la fin.
+**Ce document décrit ce qui existe déjà.** Il grandira avec le back-office.
+Ce qui manque encore est listé à la fin.
+
+---
+
+## Se connecter
+
+L'adresse est **`/admin`**. Il faut un compte administrateur et un téléphone
+avec une application d'authentification (1Password, Google Authenticator,
+Authy…).
+
+**La première fois :**
+
+1. Crée un compte client normal sur le site et confirme ton adresse email.
+2. Demande au développeur de te nommer administrateur. Fais-le juste avant
+   l'étape suivante, pas plusieurs jours avant.
+3. Va sur `/admin` et connecte-toi : tu arrives sur **Double
+   authentification**. Confirme ton mot de passe, scanne le QR code, puis
+   saisis le code affiché par l'application.
+4. **Garde les codes de secours** affichés à cette étape, ailleurs que sur ton
+   téléphone (dans un gestionnaire de mots de passe, par exemple). Si tu perds
+   le téléphone, ce sont eux qui te font entrer.
+
+**Ensuite**, à chaque connexion : email, mot de passe, puis le code à 6
+chiffres de l'application.
+
+**La session se ferme toute seule** après 30 minutes sans rien faire, et au
+plus tard 8 heures après la connexion. C'est voulu : un ordinateur resté
+ouvert ne doit pas donner accès aux prix et aux commandes.
+
+**Le journal** (menu *Journal*) garde la trace de chaque modification : qui,
+quoi, quand. Il se filtre par personne et par type d'élément (produit,
+commande, lot…).
 
 ---
 
@@ -26,6 +47,8 @@ Guide non technique de l'administration d'Héphaïstos.
 | **Fiche produit**   | Tout modifier : prix, textes, photos, mise en vente |
 | **Lots**            | Enregistrer une réception de marchandise            |
 | **Rappel produit**  | Retrouver qui a reçu un lot donné                   |
+| **Journal**         | Voir qui a modifié quoi, et quand                   |
+| **Sécurité**        | État de la double authentification                  |
 
 ---
 
@@ -241,8 +264,6 @@ n'apporte rien et use sa boîte mail.
 
 ## Ce qui manque encore
 
-- **La connexion sécurisée** — mot de passe, double authentification, journal
-  d'activité. C'est ce qui débloquera l'accès depuis internet.
 - **Le remboursement depuis la fiche commande** — il arrive avec Stripe.
 - **Le paiement** — le compte Stripe doit être ouvert (dossier société, réseau
   Cartes Bancaires).

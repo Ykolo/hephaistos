@@ -56,6 +56,12 @@ export async function requireUser(): Promise<AuthSession> {
   return assertUser(await getSession());
 }
 
+/**
+ * Admin connecté. Délègue à `requireAdminAction()`, qui ajoute à
+ * `assertAdmin` la durée de vie de 8 h et la coupure après inactivité
+ * (HEP-78) : une seule règle d'accès à l'admin dans tout le code.
+ */
 export async function requireAdmin(): Promise<AuthSession> {
-  return assertAdmin(await getSession());
+  const { requireAdminAction } = await import("./admin-guard");
+  return (await requireAdminAction()).session;
 }

@@ -145,6 +145,19 @@ export const config: VercelConfig = {
       has: [{ type: "host", value: { suf: ".vercel.app" } }],
       headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
     },
+    {
+      /**
+       * L'administration, sur tous les domaines, production comprise (HEP-78).
+       * Doublé par les métadonnées `robots` du layout : un en-tête couvre
+       * aussi les réponses qui ne sont pas du HTML (redirections, 404).
+       */
+      source: "/admin/(.*)",
+      headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+    },
+    {
+      source: "/admin",
+      headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+    },
   ],
 
   // À FAIRE (HEP-32) : redirection apex ↔ www.
