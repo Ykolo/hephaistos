@@ -516,3 +516,28 @@ export async function listPublishedSlugs(db: Tx): Promise<string[]> {
   });
   return rows.map((r) => r.slug);
 }
+
+/**
+ * Ce que le sitemap publie (HEP-97) : les produits **publiés**, et la
+ * dernière modification des textes légaux. Un brouillon ou un archivé n'y
+ * figure jamais — Google ne doit pas recevoir d'URL en 404.
+ */
+export async function sitemapSource(db: Tx): Promise<{
+  products: { slug: string; updatedAt: Date }[];
+  legalUpdatedAt: Date | null;
+}> {
+  const [products, company, content] = await Promise.all([
+    db.product.findMany({
+      where: { status: "PUBLISHED" },
+      orderBy: { position: "asc" },
+      select: { slug: true, updatedAt: true },
+    }),
+    db.companySettings.findUnique({ where: { id: "singleton" }, select: { updatedAt: true } }),
+    db.contentBlock.aggregate({ _max: { updatedAt: true } }),
+  ]);
+  const dates = [company?.updatedAt, content._max.updatedAt].filter((d): d is Date => d instanceof Date);
+  return {
+    products,
+    legalUpdatedAt: dates.length ? new Date(Math.max(...dates.map((d) => d.getTime()))) : null,
+  };
+}
