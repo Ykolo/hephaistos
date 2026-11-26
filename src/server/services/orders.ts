@@ -3,8 +3,9 @@ import type { OrderStatus, PrismaClient } from "@/generated/prisma/client";
 import type { Tx } from "../db";
 import { ActionError } from "../errors";
 import { incrementStock } from "./stock";
-import { computeTotals, type PricingShipping, type Totals } from "./pricing";
+import { computeTotals, type Totals } from "./pricing";
 import { claimDiscountForOrder } from "./discounts";
+import { shippingForOrder } from "./shipping";
 import type { Address } from "@/lib/validation/address";
 
 /**
@@ -37,8 +38,6 @@ export type CreateOrderInput = {
   shippingAddress: Address;
   /** Absente = identique à l'adresse de livraison, cas de très loin le plus fréquent. */
   billingAddress?: Address;
-  /** Mode de livraison retenu dans le tunnel. Absent = retrait à définir (HEP-70). */
-  shipping?: PricingShipping | null;
   /**
    * Clé d'idempotence produite au rendu du panier (HEP-54).
    *
@@ -115,6 +114,7 @@ export async function createOrder(
     select: {
       id: true,
       discountCode: true,
+      shippingMethod: true,
       items: {
         orderBy: { id: "asc" },
         select: {
@@ -125,6 +125,7 @@ export async function createOrder(
               name: true,
               sku: true,
               priceCents: true,
+              weightGrams: true,
               availability: true,
               preorderShipsAt: true,
             },
@@ -155,10 +156,17 @@ export async function createOrder(
     ? await claimDiscountForOrder(tx, { code: cart.discountCode, lines, email: input.email })
     : null;
 
+  // Le port suit la même règle (HEP-70) : le mode vient du panier, le tarif
+  // de la grille du moment. Un appelant ne peut ni l'omettre ni le fixer.
+  const shipping = await shippingForOrder(tx, {
+    method: cart.shippingMethod,
+    lines: cart.items.map((i) => ({ qty: i.qty, weightGrams: i.product.weightGrams })),
+  });
+
   const totals = computeTotals({
     lines,
     discount,
-    shipping: input.shipping ?? null,
+    shipping,
     vatRateBps: input.vatRateBps,
   });
 
@@ -198,6 +206,8 @@ export async function createOrder(
       totalCents: totals.totalCents,
       vatRate: totals.vatRateBps,
       discountCode: totals.discountCode,
+      shippingMethod: shipping.method,
+      shippingCarrier: shipping.carrier,
 
       // Copiées, pas référencées : voir `src/lib/validation/address.ts`.
       shippingAddress: input.shippingAddress,

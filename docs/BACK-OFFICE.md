@@ -47,6 +47,8 @@ commande, lot…).
 | **Fiche produit**   | Tout modifier : prix, textes, photos, mise en vente |
 | **Lots**            | Enregistrer une réception de marchandise            |
 | **Rappel produit**  | Retrouver qui a reçu un lot donné                   |
+| **Codes promo**     | Créer, suspendre, suivre les utilisations           |
+| **Livraison**       | Changer un tarif de port, le seuil d'offre          |
 | **Journal**         | Voir qui a modifié quoi, et quand                   |
 | **Sécurité**        | État de la double authentification                  |
 
@@ -262,6 +264,28 @@ n'apporte rien et use sa boîte mail.
 
 ---
 
+## La livraison
+
+L'écran **Livraison** contient la grille des frais de port : une ligne par
+**mode** (point relais, domicile) et par **tranche de poids**.
+
+- Le colis pèse la somme des produits, plus un emballage forfaitaire. Il prend
+  la tranche **la plus légère qui le contient** : un colis de 500 g relève de
+  la tranche « jusqu'à 500 g ».
+- Au-delà de la dernière tranche d'un mode, ce mode **n'est pas proposé** au
+  client. Ajoute une tranche plus lourde si un client ne peut plus commander.
+- **« Offerte dès »** se juge sur le montant des produits **remise déduite** :
+  un code de −20 % sur 55 € laisse 44 €, et le port reste dû sous un seuil de
+  49 €. Vide = jamais offerte.
+- « Proposée aux clients » décochée : la tranche est ignorée, le colis passe à
+  la tranche suivante. Pratique pour suspendre un tarif sans le perdre.
+- Un nouveau tarif vaut **immédiatement** pour les paniers. Une commande déjà
+  passée garde le port qu'elle a payé.
+
+Chaque changement est inscrit au journal.
+
+---
+
 ## Ce qui manque encore
 
 - **Le remboursement depuis la fiche commande** — il arrive avec Stripe.
@@ -269,9 +293,9 @@ n'apporte rien et use sa boîte mail.
   Cartes Bancaires).
 - **Les mails** — le moteur sait *quel* mail envoyer, mais rien n'est encore
   expédié.
-- **L'expédition** — étiquettes, numéros de suivi, grille tarifaire.
+- **L'expédition** — étiquettes, numéros de suivi, choix du point relais.
 - **Le tableau de bord** — ventes, alertes de stock, commandes à expédier.
-- **Les codes promo**, les **factures PDF**, les **exports comptables**.
+- Les **factures PDF**, les **exports comptables**.
 
 ---
 
@@ -281,7 +305,9 @@ Quelques décisions ne peuvent venir que de la marque :
 
 - **Le poids et le volume réels de chaque produit.** Ils sont provisoires en
   base, et ils bloquent le calcul des frais de port.
-- **Le seuil de livraison offerte** et la grille tarifaire.
+- **Le seuil de livraison offerte** (49 € provisoirement), la grille
+  tarifaire et le poids de l'emballage (150 g provisoirement). La grille se
+  modifie dans **Livraison** ; le poids d'emballage demande un développeur.
 - **Les mentions légales réelles** : SIRET, capital, TVA intracommunautaire,
   directeur de publication. Le site annonce aujourd'hui être propulsé par
   Shopify — c'est **faux** et ça doit disparaître avant la mise en ligne.

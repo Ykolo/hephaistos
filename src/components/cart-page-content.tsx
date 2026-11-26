@@ -8,6 +8,7 @@ import { CartLines } from "@/components/cart-lines";
 import { Reveal } from "@/components/reveal";
 import { ClientOnly } from "@/components/client-only";
 import { CartDiscountField, CartDiscountLine, CartNotice } from "@/components/cart-discount";
+import { CartShippingChoice, FreeShippingHint, shippingSummary } from "@/components/cart-shipping";
 
 /**
  * Page `/panier` (HEP-50).
@@ -85,18 +86,25 @@ function CartContent() {
 
           <CartDiscountLine cart={cart} className="mb-2" />
 
-          <div className="mb-5 flex items-baseline justify-between">
+          <div className="mb-4 flex items-baseline justify-between">
             <span className="text-[13px] text-body">Livraison</span>
-            <span className="text-[13px] text-muted-ink">
-              {cart.totals.freeShipping
-                ? "Offerte"
-                : "Calculée à l'étape suivante"}
+            <span className={`text-[13px] ${cart.totals.shippingKnown ? "tabular-nums" : "text-muted-ink"}`}>
+              {shippingSummary(cart)}
             </span>
           </div>
 
-          {cart.totals.discountCents > 0 && (
+          <CartShippingChoice cart={cart} />
+          <FreeShippingHint cart={cart} className="mb-5" />
+
+          {/*
+            Sans mode choisi, le total est hors livraison : l'annoncer comme
+            le montant à payer serait faux (L112-1 du code de la consommation).
+          */}
+          {(cart.totals.shippingKnown || cart.totals.discountCents > 0) && (
             <div className="mb-5 flex items-baseline justify-between border-t border-line-strong pt-4">
-              <span className="text-[13px] text-body">Total hors livraison</span>
+              <span className="text-[13px] text-body">
+                {cart.totals.shippingKnown ? "Total" : "Total hors livraison"}
+              </span>
               <span className="font-serif text-[1.2rem]">
                 {formatPriceCompact(cart.totals.totalCents)}
               </span>
@@ -118,8 +126,9 @@ function CartContent() {
           </div>
 
           <p className="m-0 mb-6 border-t border-line-strong pt-4 text-[11.5px] leading-[1.6] text-muted-ink">
-            Prix TTC, TVA incluse. Le montant final, frais de port compris,
-            s&apos;affichera avant le paiement.
+            {cart.totals.shippingKnown
+              ? "Prix TTC, TVA et livraison comprises."
+              : "Prix TTC, TVA incluse. Choisissez un mode de livraison pour connaître le total."}
           </p>
 
           <CartDiscountField cart={cart} />

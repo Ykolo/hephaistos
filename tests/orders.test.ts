@@ -3,7 +3,15 @@ import { randomBytes } from "node:crypto";
 import { createOrder, findOrderByPublicToken } from "@/server/services/orders";
 import { addItem } from "@/server/services/cart";
 import type { Address } from "@/lib/validation/address";
-import { cleanupTestProducts, createTestProduct, testDb } from "./helpers/db";
+import {
+  chooseTestShipping,
+  cleanupTestProducts,
+  createTestProduct,
+  testDb,
+  withTestShippingGrid,
+} from "./helpers/db";
+
+withTestShippingGrid();
 
 /**
  * HEP-52 — le modèle de commande.
@@ -34,7 +42,8 @@ async function cartWith(product: { slug: string }, qty = 2) {
   return t;
 }
 
-function place(cartToken: string, overrides: Record<string, unknown> = {}) {
+async function place(cartToken: string, overrides: Record<string, unknown> = {}) {
+  await chooseTestShipping(cartToken);
   // Toujours dans une transaction : le numéro est tiré en base, et un échec
   // doit le rendre plutôt que le consommer.
   return testDb.$transaction((tx) =>
@@ -69,7 +78,8 @@ describe("lignes figées", () => {
     const p = await createTestProduct({ stock: 10 }); // 2000 centimes
     const order = await place(await cartWith(p));
 
-    expect(order.totals.totalCents).toBe(4000);
+    // 4000 + 590 de port domicile (grille de test).
+    expect(order.totals.totalCents).toBe(4590);
 
     await testDb.product.update({
       where: { id: p.id },
@@ -81,7 +91,7 @@ describe("lignes figées", () => {
       select: { totalCents: true, subtotalCents: true, items: true },
     });
 
-    expect(stored.totalCents).toBe(4000);
+    expect(stored.totalCents).toBe(4590);
     expect(stored.subtotalCents).toBe(4000);
     expect(stored.items[0].priceCentsSnapshot).toBe(2000);
     expect(stored.items[0].nameSnapshot).toBe(p.name);
@@ -106,7 +116,7 @@ describe("lignes figées", () => {
     expect(stored.items[0].productId).toBeNull();
     expect(stored.items[0].nameSnapshot).toBe(p.name);
     expect(stored.items[0].priceCentsSnapshot).toBe(2000);
-    expect(stored.totalCents).toBe(2000);
+    expect(stored.totalCents).toBe(2590);
   });
 });
 
@@ -207,9 +217,8 @@ describe("adresses", () => {
 describe("montants", () => {
   it("enregistre les totaux du moteur de prix, TVA comprise", async () => {
     const p = await createTestProduct({ stock: 10 });
-    const order = await place(await cartWith(p, 3), {
-      shipping: { priceCents: 590 },
-    });
+    // 3 × 100 g + 150 g d'emballage = 450 g : tranche domicile ≤ 500 g, 5,90 €.
+    const order = await place(await cartWith(p, 3));
 
     const stored = await testDb.order.findUniqueOrThrow({
       where: { id: order.id },

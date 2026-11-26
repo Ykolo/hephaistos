@@ -13,7 +13,15 @@ import {
 } from "@/server/services/orders";
 import { addItem } from "@/server/services/cart";
 import type { Address } from "@/lib/validation/address";
-import { cleanupTestProducts, createTestProduct, testDb } from "./helpers/db";
+import {
+  chooseTestShipping,
+  cleanupTestProducts,
+  createTestProduct,
+  testDb,
+  withTestShippingGrid,
+} from "./helpers/db";
+
+withTestShippingGrid();
 
 /**
  * HEP-53 — le cycle de vie.
@@ -51,6 +59,7 @@ async function placeOrder(options: { preorder?: boolean } = {}) {
 
   const cartToken = `test-${randomBytes(12).toString("base64url")}`;
   await addItem(testDb, cartToken, p.slug, 1);
+  await chooseTestShipping(cartToken);
 
   return testDb.$transaction((tx) =>
     createOrder(tx, {

@@ -41,7 +41,7 @@ export async function mergeCartsOnSignIn(
   const guest = input.guestToken
     ? await tx.cart.findUnique({
         where: { token: input.guestToken },
-        select: { id: true, userId: true, discountCode: true },
+        select: { id: true, userId: true, discountCode: true, shippingMethod: true },
       })
     : null;
 
@@ -55,6 +55,7 @@ export async function mergeCartsOnSignIn(
     select: {
       id: true,
       discountCode: true,
+      shippingMethod: true,
       items: { select: { productId: true, qty: true, reservedUntil: true } },
     },
   });
@@ -81,6 +82,11 @@ export async function mergeCartsOnSignIn(
   const discountReplaced = Boolean(
     target.discountCode && otherDiscount && otherDiscount !== target.discountCode,
   );
+
+  // Le mode de livraison suit la même règle que le code : le choix le plus
+  // récent, celui du panier en cours, l'emporte (HEP-70).
+  const shippingMethod =
+    target.shippingMethod ?? accountCarts.find((c) => c.shippingMethod)?.shippingMethod ?? null;
 
   // Les paniers absorbés disparaissent d'abord : leurs réservations ne
   // doivent pas compter contre le stock que le panier fusionné va demander.
@@ -153,6 +159,7 @@ export async function mergeCartsOnSignIn(
       userId: input.userId,
       token: input.newToken,
       discountCode,
+      shippingMethod,
       expiresAt: new Date(Date.now() + CART_TTL_DAYS * 24 * 60 * 60 * 1000),
     },
   });

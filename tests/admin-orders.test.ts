@@ -14,7 +14,15 @@ import { createOrder, transitionOrder } from "@/server/services/orders";
 import { addItem } from "@/server/services/cart";
 import { orderSearchSchema } from "@/lib/validation/admin-order";
 import type { Address } from "@/lib/validation/address";
-import { cleanupTestProducts, createTestProduct, testDb } from "./helpers/db";
+import {
+  chooseTestShipping,
+  cleanupTestProducts,
+  createTestProduct,
+  testDb,
+  withTestShippingGrid,
+} from "./helpers/db";
+
+withTestShippingGrid();
 
 /**
  * HEP-56 — l'écran que Jules ouvre tous les matins.
@@ -53,6 +61,7 @@ async function order(opts: {
 }) {
   const cartToken = `test-${randomBytes(12).toString("base64url")}`;
   await addItem(testDb, cartToken, product.slug, 1);
+  await chooseTestShipping(cartToken);
   const created = await testDb.$transaction((tx) =>
     createOrder(tx, {
       cartToken,

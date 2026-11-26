@@ -242,6 +242,31 @@ async function main() {
     },
   });
 
+  // Grille de port (HEP-70). PROVISIONAL de bout en bout : les tranches, les
+  // prix et le seuil de 49 € attendent la décision de Jules et les tarifs
+  // négociés via Sendcloud (HEP-69). `update: {}` : relancer le seed n'écrase
+  // jamais un tarif modifié dans /admin/livraison.
+  const FREE_ABOVE_CENTS = 4900; // PROVISIONAL
+  const grid = [
+    { carrier: "mondial_relay", method: "PICKUP_POINT", maxWeightGrams: 500, priceCents: 449 },
+    { carrier: "mondial_relay", method: "PICKUP_POINT", maxWeightGrams: 1000, priceCents: 499 },
+    { carrier: "mondial_relay", method: "PICKUP_POINT", maxWeightGrams: 2000, priceCents: 649 },
+    { carrier: "mondial_relay", method: "PICKUP_POINT", maxWeightGrams: 5000, priceCents: 1090 },
+    { carrier: "colissimo", method: "HOME", maxWeightGrams: 250, priceCents: 549 },
+    { carrier: "colissimo", method: "HOME", maxWeightGrams: 500, priceCents: 749 },
+    { carrier: "colissimo", method: "HOME", maxWeightGrams: 1000, priceCents: 949 },
+    { carrier: "colissimo", method: "HOME", maxWeightGrams: 2000, priceCents: 1090 },
+    { carrier: "colissimo", method: "HOME", maxWeightGrams: 5000, priceCents: 1690 },
+  ] as const;
+  for (const rate of grid) {
+    await db.shippingRate.upsert({
+      where: { method_maxWeightGrams: { method: rate.method, maxWeightGrams: rate.maxWeightGrams } },
+      update: {},
+      create: { ...rate, freeAboveCents: FREE_ABOVE_CENTS },
+    });
+  }
+  console.log(`✓ Grille de port — ${grid.length} tranches (provisoires)`);
+
   console.log(`\nBase prête : ${await db.product.count()} produits.`);
   await db.$disconnect();
 }

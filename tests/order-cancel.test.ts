@@ -9,7 +9,15 @@ import {
 import { addItem } from "@/server/services/cart";
 import { sellProduct } from "@/server/services/stock";
 import type { Address } from "@/lib/validation/address";
-import { cleanupTestProducts, createTestProduct, testDb } from "./helpers/db";
+import {
+  chooseTestShipping,
+  cleanupTestProducts,
+  createTestProduct,
+  testDb,
+  withTestShippingGrid,
+} from "./helpers/db";
+
+withTestShippingGrid();
 
 /**
  * HEP-55 — annuler, c'est trois choses en même temps : changer l'état, rendre
@@ -36,6 +44,7 @@ async function stockOf(id: string) {
 async function placeOrder(product: { slug: string }, qty = 2) {
   const cartToken = `test-${randomBytes(12).toString("base64url")}`;
   await addItem(testDb, cartToken, product.slug, qty);
+  await chooseTestShipping(cartToken);
   return testDb.$transaction((tx) =>
     createOrder(tx, {
       cartToken,

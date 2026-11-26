@@ -20,6 +20,7 @@ import {
   removeItem,
   updateQty,
 } from "../services/cart";
+import { setCartShippingMethod } from "../services/shipping";
 import { slugSchema } from "@/lib/validation/common";
 import { DISCOUNT_CODE_PATTERN, normalizeDiscountCode } from "@/lib/discounts";
 
@@ -167,6 +168,23 @@ export const removeDiscount = action(
     return view(token);
   },
   { name: "cart.discount.remove" },
+);
+
+/**
+ * Choix du mode de livraison (HEP-70). Le client envoie un mode, jamais un
+ * prix : le tarif est relu dans la grille à chaque affichage.
+ */
+export const chooseShipping = action(
+  z.object({
+    method: z.enum(["HOME", "PICKUP_POINT"], { error: "Mode de livraison inconnu." }),
+  }),
+  async ({ method }) => {
+    const token = await requireCartToken();
+    await setCartShippingMethod(db, token, method);
+    revalidateCart();
+    return view(token);
+  },
+  { name: "cart.shipping.choose" },
 );
 
 /** Le client a lu le message ponctuel : il ne revient plus. */

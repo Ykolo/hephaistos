@@ -7,7 +7,15 @@ import {
 } from "@/server/services/orders";
 import { addItem, updateQty } from "@/server/services/cart";
 import type { Address } from "@/lib/validation/address";
-import { cleanupTestProducts, createTestProduct, testDb } from "./helpers/db";
+import {
+  chooseTestShipping,
+  cleanupTestProducts,
+  createTestProduct,
+  testDb,
+  withTestShippingGrid,
+} from "./helpers/db";
+
+withTestShippingGrid();
 
 /**
  * HEP-54 — « l'erreur numéro un des boutiques développées sur mesure ».
@@ -35,6 +43,7 @@ async function filledCart(qty = 2) {
   const p = await createTestProduct({ stock: 50 });
   const cartToken = token();
   await addItem(testDb, cartToken, p.slug, qty);
+  await chooseTestShipping(cartToken);
   return { product: p, cartToken };
 }
 

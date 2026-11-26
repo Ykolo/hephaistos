@@ -53,6 +53,9 @@ async function AdminGate({ children }: { children: React.ReactNode }) {
           <Link href="/admin/codes-promo" className="underline underline-offset-4">
             Codes promo
           </Link>
+          <Link href="/admin/livraison" className="underline underline-offset-4">
+            Livraison
+          </Link>
           <Link href={adminRoutes.auditLog} className="underline underline-offset-4">
             Journal
           </Link>
