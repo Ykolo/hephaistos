@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { Reveal } from "@/components/reveal";
 import { NewsletterBand } from "@/components/newsletter-band";
 import { Eyebrow } from "@/components/primitives";
+import { pageMetadata } from "@/lib/metadata";
 
-export const metadata: Metadata = {
-  title: "La vision — L'avenir de la marque | Héphaïstos",
+export const metadata: Metadata = pageMetadata({
+  title: "La vision — L'avenir de la marque",
   description:
     "Où va Héphaïstos : des Fondations à la référence du soin masculin.",
-};
+  path: "/vision",
+});
 
 const phases = [
   {

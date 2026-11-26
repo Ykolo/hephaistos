@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ProductDetail } from "@/components/product-detail";
-import { formatPriceCompact } from "@/lib/format";
+import { productMetadata } from "@/lib/metadata";
 import { getProductBySlug, getProducts, getProductSlugs } from "@/server/catalog";
 
 /**
@@ -20,17 +20,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const product = await getProductBySlug(id);
-  if (!product) return { title: "Produit introuvable | Héphaïstos" };
+  if (!product) return { title: "Produit introuvable", robots: { index: false, follow: false } };
 
-  // Les champs SEO de la base priment quand ils sont renseignés ; sinon on
-  // retombe sur le contenu de la fiche. La génération complète (canonical,
-  // Open Graph, JSON-LD) appartient au lot 13 — HEP-98 et HEP-99.
-  return {
-    title:
-      product.seoTitle ??
-      `${product.name} — ${formatPriceCompact(product.priceCents)} | Héphaïstos`,
-    description: product.seoDescription ?? product.description,
-  };
+  // Champs SEO de l'admin s'ils sont remplis, sinon le nom et l'accroche
+  // (HEP-98) : une fiche ne sort jamais sans titre ni description.
+  return productMetadata(product);
 }
 
 export default async function ProductPage({

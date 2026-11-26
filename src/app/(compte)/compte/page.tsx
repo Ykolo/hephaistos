@@ -10,7 +10,7 @@ import { getSession } from "@/server/auth-guards";
 import { db } from "@/server/db";
 import { listAccountOrders } from "@/server/services/account";
 
-export const metadata: Metadata = { title: "Mon compte | Héphaïstos" };
+export const metadata: Metadata = { title: "Mon compte" };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 

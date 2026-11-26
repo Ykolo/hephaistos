@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { Reveal } from "@/components/reveal";
 import { NewsletterHeroForm } from "@/components/newsletter-hero-form";
+import { pageMetadata } from "@/lib/metadata";
 
-export const metadata: Metadata = {
-  title: "Accès prioritaire — Newsletter | Héphaïstos",
+export const metadata: Metadata = pageMetadata({
+  title: "Accès prioritaire — Newsletter",
   description:
     "Sois notifié en avant-première du lancement, avec un accès et une offre réservés à la liste.",
-};
+  path: "/newsletter",
+});
 
 export default function NewsletterPage() {
   return (

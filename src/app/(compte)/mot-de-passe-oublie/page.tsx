@@ -4,7 +4,7 @@ import { ForgotPasswordForm } from "@/components/account/account-forms";
 import { AccountShell, asideLinkCls } from "@/components/account/shell";
 import { accountRoutes } from "@/lib/routes";
 
-export const metadata: Metadata = { title: "Mot de passe oublié | Héphaïstos" };
+export const metadata: Metadata = { title: "Mot de passe oublié" };
 
 export default function ForgotPasswordPage() {
   return (

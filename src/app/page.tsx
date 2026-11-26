@@ -14,7 +14,26 @@ import {
 } from "@/components/primitives";
 import { routes } from "@/lib/routes";
 import { heroImages } from "@/lib/content";
+import type { Metadata } from "next";
 import { getProducts } from "@/server/catalog";
+import { pageMetadata, SITE_NAME, SITE_TAGLINE } from "@/lib/metadata";
+
+/**
+ * L'accueil garde son titre complet, hors du modèle « %s — Héphaïstos » :
+ * c'est la seule page dont le titre commence par la marque.
+ */
+const home = pageMetadata({
+  title: SITE_NAME,
+  description:
+    "Soins visage pour homme. Des rituels simples, conçus pour les hommes qui se construisent. Fabriqué en France, formules clean.",
+  path: "/",
+});
+export const metadata: Metadata = {
+  ...home,
+  title: { absolute: `${SITE_NAME} — ${SITE_TAGLINE}` },
+  openGraph: { ...home.openGraph, title: `${SITE_NAME} — ${SITE_TAGLINE}` },
+  twitter: { ...home.twitter, title: `${SITE_NAME} — ${SITE_TAGLINE}` },
+};
 
 const reviews = [
   {

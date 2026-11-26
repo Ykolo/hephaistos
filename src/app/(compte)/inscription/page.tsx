@@ -4,7 +4,7 @@ import { SignUpForm } from "@/components/account/account-forms";
 import { AccountShell, asideLinkCls } from "@/components/account/shell";
 import { accountRoutes } from "@/lib/routes";
 
-export const metadata: Metadata = { title: "Créer un compte | Héphaïstos" };
+export const metadata: Metadata = { title: "Créer un compte" };
 
 export default function SignUpPage() {
   return (

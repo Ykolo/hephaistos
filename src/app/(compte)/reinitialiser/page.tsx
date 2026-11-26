@@ -6,7 +6,7 @@ import { Notice } from "@/components/account/fields";
 import { AccountShell, asideLinkCls } from "@/components/account/shell";
 import { accountRoutes } from "@/lib/routes";
 
-export const metadata: Metadata = { title: "Nouveau mot de passe | Héphaïstos" };
+export const metadata: Metadata = { title: "Nouveau mot de passe" };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 

@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { UnsubscribeButton } from "@/components/unsubscribe-button";
 
 export const metadata: Metadata = {
-  title: "Désinscription | Héphaïstos",
+  title: "Désinscription",
   robots: { index: false, follow: false },
 };
 

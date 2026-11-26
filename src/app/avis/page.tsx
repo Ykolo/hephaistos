@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { Reveal } from "@/components/reveal";
 import { NewsletterBand } from "@/components/newsletter-band";
 import { Eyebrow } from "@/components/primitives";
+import { pageMetadata } from "@/lib/metadata";
 
-export const metadata: Metadata = {
-  title: "Avis & résultats | Héphaïstos",
+export const metadata: Metadata = pageMetadata({
+  title: "Avis & résultats",
   description:
     "Les premiers retours des testeurs du programme pilote Héphaïstos.",
-};
+  path: "/avis",
+});
 
 const reviews = [
   "« Routine simple que je tiens enfin sur la durée. La peau respire. »",

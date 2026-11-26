@@ -4,12 +4,14 @@ import { NewsletterBand } from "@/components/newsletter-band";
 import { ProductGrid } from "@/components/product-grid";
 import { Eyebrow } from "@/components/primitives";
 import { getProducts } from "@/server/catalog";
+import { pageMetadata } from "@/lib/metadata";
 
-export const metadata: Metadata = {
-  title: "Les Fondations — Boutique | Héphaïstos",
+export const metadata: Metadata = pageMetadata({
+  title: "Les Fondations — Boutique",
   description:
     "Trois soins essentiels pensés pour la peau masculine. Le socle d'un rituel quotidien.",
-};
+  path: "/boutique",
+});
 
 const filters = ["Tous", "Nettoyage", "Soin ciblé", "Hydratation"];
 

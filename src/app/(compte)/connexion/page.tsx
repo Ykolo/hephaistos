@@ -8,7 +8,7 @@ import { safeReturnPath } from "@/lib/auth-messages";
 import { accountRoutes, routes } from "@/lib/routes";
 import { getSession } from "@/server/auth-guards";
 
-export const metadata: Metadata = { title: "Connexion | Héphaïstos" };
+export const metadata: Metadata = { title: "Connexion" };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
