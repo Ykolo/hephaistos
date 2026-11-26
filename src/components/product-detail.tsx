@@ -287,7 +287,7 @@ export function ProductDetail({
         </div>
       </section>
 
-      <NewsletterBand />
+      <NewsletterBand source="produit" />
     </div>
   );
 }
