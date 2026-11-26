@@ -4,7 +4,7 @@ import Link from "next/link";
 import { routes } from "@/lib/routes";
 
 export const metadata: Metadata = {
-  title: "Inscription | Héphaïstos",
+  title: "Inscription à la newsletter",
   robots: { index: false, follow: false },
 };
 

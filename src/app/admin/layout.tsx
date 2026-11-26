@@ -8,7 +8,7 @@ import type { Metadata } from "next";
  * pose en plus l'en-tête `X-Robots-Tag` (cf. `vercel.ts`).
  */
 export const metadata: Metadata = {
-  title: "Administration | Héphaïstos",
+  title: "Administration",
   robots: { index: false, follow: false, nocache: true },
 };
 
