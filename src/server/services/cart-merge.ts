@@ -26,6 +26,8 @@ export type CartMergeResult = {
   token: string | null;
   /** Les deux paniers portaient un code promo différent : celui du compte a été écarté. */
   discountReplaced: boolean;
+  /** Le code écarté, pour le dire au client (HEP-75). */
+  replacedDiscountCode: string | null;
 };
 
 function reservationExpiry(): Date {
@@ -58,7 +60,7 @@ export async function mergeCartsOnSignIn(
   });
 
   const target = usableGuest ?? accountCarts.shift();
-  if (!target) return { token: null, discountReplaced: false };
+  if (!target) return { token: null, discountReplaced: false, replacedDiscountCode: null };
 
   const targetItems = await tx.cartItem.findMany({
     where: { cartId: target.id },
@@ -155,5 +157,9 @@ export async function mergeCartsOnSignIn(
     },
   });
 
-  return { token: input.newToken, discountReplaced };
+  return {
+    token: input.newToken,
+    discountReplaced,
+    replacedDiscountCode: discountReplaced ? otherDiscount : null,
+  };
 }

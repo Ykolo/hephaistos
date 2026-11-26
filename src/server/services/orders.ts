@@ -3,12 +3,8 @@ import type { OrderStatus, PrismaClient } from "@/generated/prisma/client";
 import type { Tx } from "../db";
 import { ActionError } from "../errors";
 import { incrementStock } from "./stock";
-import {
-  computeTotals,
-  type PricingDiscount,
-  type PricingShipping,
-  type Totals,
-} from "./pricing";
+import { computeTotals, type PricingShipping, type Totals } from "./pricing";
+import { claimDiscountForOrder } from "./discounts";
 import type { Address } from "@/lib/validation/address";
 
 /**
@@ -43,8 +39,6 @@ export type CreateOrderInput = {
   billingAddress?: Address;
   /** Mode de livraison retenu dans le tunnel. Absent = retrait à définir (HEP-70). */
   shipping?: PricingShipping | null;
-  /** Remise **déjà validée** par le moteur de codes promo (HEP-75). */
-  discount?: PricingDiscount | null;
   /**
    * Clé d'idempotence produite au rendu du panier (HEP-54).
    *
@@ -120,6 +114,7 @@ export async function createOrder(
     where: { token: input.cartToken },
     select: {
       id: true,
+      discountCode: true,
       items: {
         orderBy: { id: "asc" },
         select: {
@@ -146,13 +141,23 @@ export async function createOrder(
   // Les montants passent par le moteur de prix (HEP-47), jamais par une
   // addition écrite ici : le total de la commande doit être au centime celui
   // que le client a vu dans son panier.
+  const lines = cart.items.map((item) => ({
+    productId: item.product.id,
+    qty: item.qty,
+    unitPriceCents: item.product.priceCents,
+  }));
+
+  // Le code du panier est **revalidé ici**, sous verrou (HEP-75) : il a pu
+  // expirer, ou être pris par un autre client, depuis qu'il a été saisi. La
+  // remise n'est jamais reçue de l'appelant — seul le code posé sur le panier
+  // compte.
+  const discount = cart.discountCode
+    ? await claimDiscountForOrder(tx, { code: cart.discountCode, lines, email: input.email })
+    : null;
+
   const totals = computeTotals({
-    lines: cart.items.map((item) => ({
-      productId: item.product.id,
-      qty: item.qty,
-      unitPriceCents: item.product.priceCents,
-    })),
-    discount: input.discount ?? null,
+    lines,
+    discount,
     shipping: input.shipping ?? null,
     vatRateBps: input.vatRateBps,
   });

@@ -1,7 +1,14 @@
 import type { Tx } from "../db";
 import { ActionError } from "../errors";
-import { computeTotals, type Totals } from "./pricing";
+import { computeTotals, type PricingDiscount, type PricingLine, type Totals } from "./pricing";
 import { availableUnits } from "./stock";
+import {
+  checkDiscount,
+  findDiscount,
+  refusalErrorCode,
+  toPricingDiscount,
+  validateDiscount,
+} from "./discounts";
 import type { StockReason } from "@/generated/prisma/client";
 
 /**
@@ -352,6 +359,21 @@ export type CartLine = {
   preorderShipsAt: Date | null;
 };
 
+/**
+ * Code promo posé sur le panier (HEP-75).
+ *
+ * `pricing` est rempli dès que le **code** est valable (actif, dans ses dates,
+ * places restantes), même si le panier, lui, n'y donne pas encore droit : le
+ * client sous le minimum doit voir la remise apparaître dès qu'il ajoute un
+ * article, y compris pendant la mise à jour optimiste côté navigateur.
+ */
+export type CartDiscount = {
+  code: string;
+  pricing: PricingDiscount | null;
+  /** Pourquoi la remise ne s'applique pas en ce moment. `null` = appliquée. */
+  message: string | null;
+};
+
 export type CartView = {
   lines: CartLine[];
   itemCount: number;
@@ -366,6 +388,13 @@ export type CartView = {
   totals: Totals;
   /** Lignes dont la quantité dépasse le stock devenu disponible. */
   hasUnavailableLines: boolean;
+  discount: CartDiscount | null;
+  /**
+   * Message ponctuel posé par la couche action, affiché jusqu'à ce que le
+   * client le ferme (par exemple : le code du compte a été remplacé à la
+   * connexion, HEP-49).
+   */
+  notice: string | null;
 };
 
 /**
@@ -380,6 +409,7 @@ export async function getCartView(db: Tx, token: string): Promise<CartView> {
     where: { token },
     select: {
       id: true,
+      discountCode: true,
       items: {
         orderBy: { id: "asc" },
         select: {
@@ -408,13 +438,15 @@ export async function getCartView(db: Tx, token: string): Promise<CartView> {
 
   // Les montants ne sont jamais recalculés ici : le moteur de prix (HEP-47)
   // est la seule implémentation, du tiroir jusqu'à la facture.
-  const totals = computeTotals({
-    lines: cart.items.map((item) => ({
-      productId: item.product.id,
-      qty: item.qty,
-      unitPriceCents: item.product.priceCents,
-    })),
-  });
+  const pricingLines = cart.items.map((item) => ({
+    productId: item.product.id,
+    qty: item.qty,
+    unitPriceCents: item.product.priceCents,
+  }));
+  const discount = cart.discountCode
+    ? await cartDiscount(db, cart.discountCode, pricingLines)
+    : null;
+  const totals = computeTotals({ lines: pricingLines, discount: discount?.pricing ?? null });
 
   const lines: CartLine[] = [];
   for (const [index, item] of cart.items.entries()) {
@@ -446,7 +478,86 @@ export async function getCartView(db: Tx, token: string): Promise<CartView> {
     hasUnavailableLines: lines.some(
       (l) => !l.isPreorder && l.qty > l.availableUnits,
     ),
+    discount,
+    notice: null,
   };
+}
+
+/**
+ * État du code posé sur le panier, à l'instant de l'affichage.
+ *
+ * Le code n'est **pas** retiré du panier quand il cesse de s'appliquer : un
+ * client qui retire un article et passe sous le minimum doit retrouver sa
+ * remise en le remettant, sans ressaisir son code. Il est affiché avec le
+ * motif.
+ *
+ * La limite par client n'est pas vérifiée ici — il faudrait lire la session à
+ * chaque affichage du panier. Elle l'est à la saisie du code (client connecté)
+ * et, dans tous les cas, au checkout.
+ */
+async function cartDiscount(
+  db: Tx,
+  code: string,
+  lines: readonly PricingLine[],
+): Promise<CartDiscount> {
+  const row = await findDiscount(db, code);
+  const check = validateDiscount(row, { now: new Date(), lines });
+  if (check.ok) return { code, pricing: check.discount, message: null };
+
+  const cartDependent = check.reason === "BELOW_MINIMUM" || check.reason === "NOT_APPLICABLE";
+  return {
+    code,
+    pricing: cartDependent && row ? toPricingDiscount(row) : null,
+    message: check.message,
+  };
+}
+
+/**
+ * Pose un code promo sur le panier.
+ *
+ * Un seul code par panier : en saisir un second **remplace** le premier. Le
+ * cumul est une source de fraude (empiler les codes de bienvenue) et de bugs
+ * (dans quel ordre appliquer un pourcentage et un montant fixe ?).
+ *
+ * Un code refusé lève une `ActionError` avec le motif exact, et le panier garde
+ * son code précédent.
+ */
+export async function applyDiscountCode(
+  db: Tx,
+  token: string,
+  rawCode: string,
+  options: { email?: string | null } = {},
+): Promise<void> {
+  const cart = await getOrCreateCart(db, token);
+  const items = await db.cartItem.findMany({
+    where: { cartId: cart.id },
+    select: { qty: true, product: { select: { id: true, priceCents: true } } },
+  });
+
+  const check = await checkDiscount(db, {
+    code: rawCode,
+    lines: items.map((i) => ({
+      productId: i.product.id,
+      qty: i.qty,
+      unitPriceCents: i.product.priceCents,
+    })),
+    email: options.email,
+  });
+  if (!check.ok) {
+    throw new ActionError(refusalErrorCode(check.reason), check.message, {
+      code: check.message,
+    });
+  }
+
+  // Le code tel qu'il est en base, pas tel qu'il a été tapé.
+  await db.cart.update({
+    where: { id: cart.id },
+    data: { discountCode: check.discount.code },
+  });
+}
+
+export async function removeDiscountCode(db: Tx, token: string): Promise<void> {
+  await db.cart.updateMany({ where: { token }, data: { discountCode: null } });
 }
 
 /**
@@ -463,5 +574,7 @@ export function emptyCartView(): CartView {
     itemCount: 0,
     totals: computeTotals({ lines: [] }),
     hasUnavailableLines: false,
+    discount: null,
+    notice: null,
   };
 }

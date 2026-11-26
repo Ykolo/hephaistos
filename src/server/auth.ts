@@ -5,7 +5,13 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { twoFactor } from "better-auth/plugins";
 import { after } from "next/server";
-import { CART_COOKIE, cartCookieOptions, newCartToken } from "./cart-session";
+import {
+  CART_COOKIE,
+  CART_NOTICE_COOKIE,
+  cartCookieOptions,
+  cartNoticeCookieOptions,
+  newCartToken,
+} from "./cart-session";
 import { db } from "./db";
 import { accountEmail, sendEmail, type EmailMessage } from "./email";
 import { ipHashFromHeaders } from "./ip";
@@ -159,6 +165,11 @@ const afterSessionHook = createAuthMiddleware(async (ctx) => {
     return mergeCartsOnSignIn(tx, { guestToken, userId: user.id, newToken: newCartToken() });
   });
   if (merged.token) ctx.setCookie(CART_COOKIE, merged.token, cartCookieOptions);
+  // Deux codes différents : celui du panier invité gagne, et le client doit
+  // savoir que l'autre a été retiré (HEP-49). Le panier lit ce cookie.
+  if (merged.replacedDiscountCode) {
+    ctx.setCookie(CART_NOTICE_COOKIE, merged.replacedDiscountCode, cartNoticeCookieOptions);
+  }
 });
 
 // --- Configuration -----------------------------------------------------------
