@@ -4,6 +4,7 @@ import {
   findPublishedProductBySlug,
   listPublishedProducts,
   listPublishedSlugs,
+  sitemapSource,
 } from "./services/catalog";
 import type { ProductView } from "@/lib/products";
 
@@ -81,6 +82,19 @@ export async function getProductSlugs(): Promise<string[]> {
   cacheTag(catalogTags.all);
   cacheLife("hours");
   return listPublishedSlugs(db);
+}
+
+/**
+ * Données du sitemap (HEP-97). Étiquetées `products` : publier ou archiver un
+ * produit dans l'admin appelle `invalidateCatalog()`, et le sitemap suit à la
+ * requête suivante, sans redéploiement. Les réglages entreprise invalident
+ * leur propre étiquette, reprise ici pour la date des mentions légales.
+ */
+export async function getSitemapSource() {
+  "use cache";
+  cacheTag(catalogTags.all, "company-settings");
+  cacheLife("hours");
+  return sitemapSource(db);
 }
 
 /**

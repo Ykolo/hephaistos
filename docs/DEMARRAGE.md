@@ -149,6 +149,13 @@ toutes les pages, et c'est la seule URL déclarée à BotID. Un second cron
 quotidien (`/api/cron/newsletter`) efface les inscriptions jamais confirmées
 au bout de 30 jours.
 
+`/sitemap.xml` et `/robots.txt` (HEP-97) sont construits par `src/lib/seo.ts`.
+Hors production (`VERCEL_ENV` ≠ `production`, donc aussi en local), robots
+répond `Disallow: /` et le sitemap est vide : c'est normal. En production,
+le sitemap ne liste que les produits publiés, avec leurs dates réelles, et
+suit l'admin sans redéploiement (étiquette de cache `products`). Une route
+privée ajoutée au site doit l'être aussi dans `PRIVATE_PATHS`.
+
 ## Les tests
 
 ```bash
