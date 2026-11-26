@@ -141,7 +141,9 @@ model Batch {
 model Cart {
   id           String     @id @default(uuid())
   token        String     @unique // cookie httpOnly, panier invité
-  userId       String? // Better Auth (lot 6) — relation câblée en HEP-62
+  // Panier invité tant que null ; rattaché au compte à la connexion (HEP-49).
+  user         User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId       String?
   items        CartItem[]
   discountCode String?
   expiresAt    DateTime // libère les réservations de stock
@@ -171,7 +173,11 @@ model Order {
   id          String      @id @default(uuid())
   number      String      @unique // HF-2026-0001
   publicToken String      @unique // suivi sans compte, non devinable
-  userId      String? // Better Auth (lot 6)
+  // Null pour un achat sans compte. `SetNull` et jamais `Cascade` : supprimer
+  // un compte (RGPD, HEP-68) ne doit pas effacer une commande, que la
+  // comptabilité doit conserver dix ans.
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId      String?
   email       String
   status      OrderStatus @default(PENDING)
 
@@ -204,15 +210,15 @@ model Order {
   // conversions part du webhook Stripe. Ajoutés après coup, ils imposent de
   // migrer une base de commandes remplie et font perdre définitivement les
   // conversions des premières ventes.
-  consentMarketing  Boolean @default(false)
-  consentAnalytics  Boolean @default(false)
-  fbp               String?
-  fbc               String?
-  clientIpHash      String? // SHA-256 salé, jamais l'IP brute
-  clientUserAgent   String?
-  gaClientId        String?
-  purchaseEventId   String? @unique // déduplication pixel / CAPI
-  capiSentAt        DateTime?
+  consentMarketing Boolean   @default(false)
+  consentAnalytics Boolean   @default(false)
+  fbp              String?
+  fbc              String?
+  clientIpHash     String? // SHA-256 salé, jamais l'IP brute
+  clientUserAgent  String?
+  gaClientId       String?
+  purchaseEventId  String?   @unique // déduplication pixel / CAPI
+  capiSentAt       DateTime?
 
   items       OrderItem[]
   events      OrderEvent[]
@@ -394,13 +400,106 @@ model DiscountRedemption {
   @@index([discountId, email])
 }
 
+// --- Authentification (Better Auth, HEP-62) --------------------------------
+//
+// ⚠️ Modèles **tenus à la main**, pas générés. Les noms de champs sont ceux
+// qu'attend Better Auth (cœur + plugin `twoFactor`) : un champ renommé casse
+// la connexion sans erreur de compilation. Après une montée de version de
+// `better-auth`, comparer avec la sortie de `bunx @better-auth/cli generate`
+// **avant** de toucher à ce bloc, et ne reporter que les différences : un
+// `generate` appliqué tel quel écraserait les ajouts propres au projet,
+// signalés ci-dessous par « Héphaïstos ».
+
+model User {
+  id               String   @id
+  name             String
+  email            String   @unique
+  emailVerified    Boolean  @default(false)
+  image            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  // Plugin twoFactor. Obligatoire pour un admin : `requireAdmin()` refuse un
+  // compte qui ne l'a pas activé.
+  twoFactorEnabled Boolean? @default(false)
+
+  // Héphaïstos — `additionalFields.role`, jamais modifiable par l'utilisateur
+  // (`input: false`). Un admin se nomme en base : `bun run admin:promote`.
+  role UserRole @default(customer)
+
+  sessions   Session[]
+  accounts   Account[]
+  twoFactors TwoFactor[]
+  carts      Cart[]
+  orders     Order[]
+  addresses  Address[]
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+
+  @@index([userId])
+}
+
+/// Un compte par méthode de connexion. Pour l'email + mot de passe,
+/// `providerId = "credential"` et `password` contient le hachage scrypt.
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+/// Jetons à usage unique : vérification d'email, réinitialisation du mot de passe.
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model TwoFactor {
+  id                      String    @id
+  secret                  String
+  backupCodes             String
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                  String
+  verified                Boolean?  @default(true)
+  failedVerificationCount Int?      @default(0)
+  lockedUntil             DateTime?
+
+  @@index([secret])
+  @@index([userId])
+}
+
 // --- Clients, contenu, ops -------------------------------------------------
-// user / session / account / verification sont générés par Better Auth (HEP-62).
-// Les `userId` ci-dessus restent de simples String tant que ces tables
-// n'existent pas ; les relations seront câblées dans le lot 6.
 
 model Address {
   id         String  @id @default(uuid())
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId     String
   label      String?
   firstName  String
@@ -504,6 +603,13 @@ model AuditLog {
 }
 
 // --- Énumérations ----------------------------------------------------------
+
+/// En minuscules, contrairement aux autres énumérations : c'est la valeur que
+/// Better Auth lit et écrit telle quelle dans `user.role`.
+enum UserRole {
+  customer
+  admin
+}
 
 enum Category {
   CLEANSING // Nettoyage

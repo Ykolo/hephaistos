@@ -8,8 +8,9 @@ import { PrismaPg } from "@prisma/adapter-pg";
  * singleton sur `globalThis` pour survivre au rechargement à chaud de Next,
  * comportement qui n'a pas sa place dans une suite de tests.
  *
- * Pointe sur le Postgres jetable (`bun run db:local:up`). Aucun test ne doit
- * jamais viser une base de preview ou de production.
+ * Pointe sur le Postgres jetable (`bun run db:local:up`) ou sur une branche
+ * Neon **créée pour l'occasion**. Aucun test ne doit jamais viser une base de
+ * preview ou de production.
  */
 const url = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
 
@@ -19,10 +20,18 @@ if (!url) {
   );
 }
 
-if (/neon\.(tech|build)/.test(url)) {
+/**
+ * Neon est refusé par défaut : une `.env.local` tirée par `vercel env pull`
+ * pointe sur la vraie base, et les tests y écriraient puis supprimeraient
+ * des données. `TEST_ON_NEON_BRANCH=1` lève le refus — à ne poser que dans
+ * l'environnement d'une branche Neon jetable, jamais à côté d'une URL de
+ * preview ou de production.
+ */
+if (/neon\.(tech|build)/.test(url) && process.env.TEST_ON_NEON_BRANCH !== "1") {
   throw new Error(
     "Les tests refusent de tourner sur Neon : ils écrivent et suppriment des " +
-      "données. Utilisez `bun run db:local:up`.",
+      "données. Utilisez `bun run db:local:up`, ou une branche Neon jetable " +
+      "avec TEST_ON_NEON_BRANCH=1.",
   );
 }
 

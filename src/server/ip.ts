@@ -18,7 +18,10 @@ import { headers } from "next/headers";
  * première valeur étant le client d'origine.
  */
 async function clientIp(): Promise<string> {
-  const h = await headers();
+  return rawIp(await headers());
+}
+
+function rawIp(h: Headers): string {
   return (
     h.get("x-real-ip") ??
     h.get("x-forwarded-for")?.split(",")[0]?.trim() ??
@@ -50,4 +53,13 @@ function sha256(value: string): string {
 /** IP hachée de la requête courante — la seule forme qui quitte ce module. */
 export async function currentIpHash(): Promise<string> {
   return hashIp(await clientIp());
+}
+
+/**
+ * Même chose à partir d'en-têtes explicites — pour les hooks Better Auth, qui
+ * reçoivent la requête en paramètre et peuvent tourner hors du contexte de
+ * requête de Next (tests, appels `auth.api.*` directs).
+ */
+export function ipHashFromHeaders(h: Headers): string {
+  return hashIp(rawIp(h));
 }

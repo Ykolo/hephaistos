@@ -16,8 +16,11 @@ export type RateLimitRule = {
   /** Nombre d'exécutions autorisées par `windowSeconds`. */
   limit: number;
   windowSeconds: number;
-  /** Clé d'isolement : IP (hachée) ou session (token de panier). */
-  by: "ip" | "session";
+  /**
+   * Clé d'isolement : IP (hachée), session (token de panier) ou compte visé
+   * (email haché, appliqué par les hooks de `auth.ts`).
+   */
+  by: "ip" | "session" | "account";
 };
 
 /**
@@ -28,9 +31,19 @@ export const RATE_LIMITS = {
   newsletter: { limit: 5, windowSeconds: 10 * 60, by: "ip" },
   contact: { limit: 3, windowSeconds: 10 * 60, by: "ip" },
   review: { limit: 2, windowSeconds: 24 * 60 * 60, by: "ip" },
-  // Connexion (lot 6) : à doubler d'une seconde règle par compte, sinon une
-  // attaque distribuée sur un seul compte passe sous le radar de l'IP.
+  // Connexion (HEP-62) : deux règles, toutes deux appliquées. Par IP seule,
+  // une attaque répartie sur mille adresses contre un même compte passerait
+  // sous le radar ; par compte seul, une IP pourrait essayer mille comptes.
   login: { limit: 5, windowSeconds: 15 * 60, by: "ip" },
+  loginAccount: { limit: 5, windowSeconds: 15 * 60, by: "account" },
+  // Code TOTP à 6 chiffres : sans quota, il se devine en quelques heures.
+  // Le plugin verrouille aussi le compte après plusieurs échecs ; cette
+  // règle-ci coupe l'IP avant.
+  twoFactor: { limit: 5, windowSeconds: 15 * 60, by: "ip" },
+  // Inscription et envois d'email : chaque appel peut faire partir un mail,
+  // donc coûter de l'argent et abîmer la réputation du domaine d'envoi.
+  signUp: { limit: 5, windowSeconds: 60 * 60, by: "ip" },
+  authEmail: { limit: 3, windowSeconds: 15 * 60, by: "account" },
   checkout: { limit: 10, windowSeconds: 10 * 60, by: "ip" },
   cart: { limit: 60, windowSeconds: 60, by: "session" },
 } as const satisfies Record<string, RateLimitRule>;
