@@ -10,11 +10,16 @@ import { sharedSentryOptions } from "@/lib/sentry-scrub";
  * `botProtection: true` doit avoir sa page dans cette liste — sinon le jeton
  * n'est pas envoyé et `checkBotId()` prend chaque visiteur pour un robot.
  *
- * À compléter au fil des lots : newsletter (HEP-67), avis (HEP-90),
- * inscription (HEP-63).
+ * La newsletter (HEP-67) passe par un Route Handler, pour n'avoir qu'une URL
+ * à protéger alors que son formulaire est sur presque toutes les pages.
+ *
+ * À compléter au fil des lots : avis (HEP-90), inscription (HEP-63).
  */
 initBotId({
-  protect: [{ path: "/contact", method: "POST" }],
+  protect: [
+    { path: "/contact", method: "POST" },
+    { path: "/api/newsletter/subscribe", method: "POST" },
+  ],
 });
 
 /**
