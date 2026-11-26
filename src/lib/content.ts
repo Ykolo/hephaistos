@@ -20,20 +20,16 @@ export const heroImages = {
 export type LegalKey = "mentions" | "cgv" | "confid" | "cookies" | "retour";
 
 /**
- * ⚠️ Ces textes sont faux sur deux points signalés dans `docs/BACKEND.md` §6 :
- * ils annoncent un hébergement et un paiement Shopify, décision inversée
- * depuis. SIRET, capital et TVA restent à fournir par Jules. À corriger avant
- * toute mise en ligne — c'est bloquant (HEP-87).
+ * Textes des onglets de `/legal`. Les mentions légales et les CGV sont
+ * construites depuis les réglages entreprise (HEP-80) ; les autres restent ici
+ * jusqu'à HEP-81.
  */
 export const legalContent: Record<LegalKey, { t: string; b: string }> = {
-  mentions: {
-    t: "Mentions légales",
-    b: "Éditeur du site : Héphaïstos Paris. Siège social : Paris, France. Directeur de la publication : Jules [Nom]. Hébergement : Shopify Inc. Contact : contact@hephaistosparis.com. SIRET, capital social et numéro de TVA intracommunautaire à compléter.",
-  },
-  cgv: {
-    t: "Conditions générales de vente",
-    b: "Les présentes CGV régissent les ventes conclues sur le site Héphaïstos. Prix exprimés en euros toutes taxes comprises. Paiement sécurisé via Shopify Payments. Livraison en France et en Europe. Droit de rétractation de 14 jours conformément au Code de la consommation. Le texte intégral rédigé par Jules sera intégré ici.",
-  },
+  // Mentions légales et CGV : construites depuis les réglages entreprise
+  // (HEP-80, `src/lib/company.ts`), jamais écrites en dur ici. Ces deux
+  // textes annonçaient Shopify comme hébergeur et moyen de paiement.
+  mentions: { t: "Mentions légales", b: "" },
+  cgv: { t: "Conditions générales de vente", b: "" },
   confid: {
     t: "Politique de confidentialité",
     b: "Les données collectées (email, informations de commande) sont traitées conformément au RGPD, uniquement pour le traitement des commandes et, avec consentement, l'envoi de la newsletter. Vous disposez d'un droit d'accès, de rectification et de suppression. Aucune donnée n'est revendue à des tiers.",

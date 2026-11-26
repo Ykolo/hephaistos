@@ -594,16 +594,28 @@ model ContentBlock {
 }
 
 /// Une seule ligne. Alimente les factures et les mentions légales (HEP-80).
+/// Informations de la société, en un seul enregistrement (HEP-80). Elles
+/// alimentent mentions légales, CGV, pied de page, factures (HEP-61) et mails.
+/// `null` = pas encore fourni par Jules : le site affiche « à compléter »
+/// plutôt qu'une valeur inventée.
 model CompanySettings {
-  id           String   @id @default("singleton")
-  legalName    String
-  address      Json
-  siret        String
-  vatNumber    String
-  contactEmail String
-  contactPhone String?
-  vatRate      Int      @default(2000)
-  shipsTo      String[] @default(["FR"])
+  id                  String   @id @default("singleton")
+  legalName           String
+  legalForm           String? // SAS, SASU, SARL…
+  shareCapitalCents   Int?
+  address             Json // { line1, line2?, postalCode, city, country }
+  siret               String?
+  vatNumber           String?
+  rcs                 String? // « RCS Paris 123 456 789 »
+  publicationDirector String?
+  contactEmail        String
+  contactPhone        String?
+  vatRate             Int      @default(2000)
+  shipsTo             String[] @default(["FR"])
+  currency            String   @default("EUR")
+  hostName            String   @default("Vercel Inc.")
+  hostAddress         String   @default("440 N Barranca Ave #4133, Covina, CA 91723, États-Unis")
+  updatedAt           DateTime @default(now()) @updatedAt
 }
 
 model AuditLog {

@@ -7,7 +7,12 @@ const linkCls =
 const colTitle =
   "mb-[18px] text-[11px] uppercase tracking-[.2em] text-dust-faint";
 
-export function Footer() {
+/**
+ * `companySlot` : la ligne société (HEP-80), rendue côté serveur depuis les
+ * réglages entreprise. Elle remplace « Propulsé par Shopify », faux depuis
+ * l'abandon de Shopify.
+ */
+export function Footer({ companySlot }: { companySlot: React.ReactNode }) {
   return (
     <footer className="bg-footer px-6 pb-10 pt-[clamp(56px,8vw,96px)] text-dust sm:px-14">
       <div className="mx-auto max-w-[1320px]">
@@ -78,7 +83,7 @@ export function Footer() {
 
         <div className="flex flex-wrap justify-between gap-4 pt-[30px] text-[11.5px] tracking-[.06em] text-dust-faint">
           <span>© 2026 Héphaïstos Paris — Tous droits réservés.</span>
-          <span>Paris, France · Propulsé par Shopify</span>
+          {companySlot}
         </div>
       </div>
     </footer>

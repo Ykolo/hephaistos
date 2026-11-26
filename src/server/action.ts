@@ -157,11 +157,13 @@ export function action<S extends z.ZodType, T>(
  * Variante pour les formulaires HTML natifs, qui envoient un `FormData`.
  * Les cases à cocher absentes valent `false` plutôt que `undefined`, sinon
  * une case décochée déclenche une erreur « champ requis » incompréhensible.
+ * Les champs de `arrays` (cases multiples d'un même nom) arrivent en liste :
+ * `Object.fromEntries` n'en garderait que la dernière valeur.
  */
 export function formAction<S extends z.ZodType, T>(
   schema: S,
   handler: (input: z.output<S>, ctx: ActionContext) => Promise<T>,
-  options: ActionOptions & { booleans?: readonly string[] },
+  options: ActionOptions & { booleans?: readonly string[]; arrays?: readonly string[] },
 ) {
   const run = action(schema, handler, options);
 
@@ -169,6 +171,9 @@ export function formAction<S extends z.ZodType, T>(
     const raw: Record<string, unknown> = Object.fromEntries(formData.entries());
     for (const key of options.booleans ?? []) {
       raw[key] = formData.get(key) === "on" || formData.get(key) === "true";
+    }
+    for (const key of options.arrays ?? []) {
+      raw[key] = formData.getAll(key);
     }
     return run(raw);
   };

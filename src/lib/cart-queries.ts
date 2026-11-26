@@ -89,6 +89,7 @@ function withTotals(
     discount: pricing,
     rates: base?.shipping.rates ?? [],
     method,
+    vatRateBps: base?.totals.vatRateBps,
   });
   const discount = base?.discount
     ? {

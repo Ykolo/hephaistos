@@ -2,6 +2,7 @@ import type { Tx } from "../db";
 import { ActionError } from "../errors";
 import { computeTotals, type PricingDiscount, type PricingLine, type Totals } from "./pricing";
 import { activeShippingRates } from "./shipping";
+import { currentVatRate } from "./company";
 import { priceCart, type CartShipping } from "@/lib/shipping";
 import { availableUnits } from "./stock";
 import {
@@ -461,6 +462,8 @@ export async function getCartView(db: Tx, token: string): Promise<CartView> {
     discount: discount?.pricing ?? null,
     rates: await activeShippingRates(db),
     method: cart.shippingMethod,
+    // Le taux des réglages entreprise (HEP-80), le même que la commande.
+    vatRateBps: await currentVatRate(db),
   });
 
   const lines: CartLine[] = [];

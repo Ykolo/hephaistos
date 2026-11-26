@@ -15,8 +15,11 @@ import { useUIStore } from "@/store/ui-store";
 export function SiteChrome({
   children,
   searchSlot,
+  companySlot,
 }: {
   children: React.ReactNode;
+  /** Ligne société du pied de page (HEP-80), même principe que `searchSlot`. */
+  companySlot: React.ReactNode;
   /**
    * Recherche déjà rendue côté serveur, sous <Suspense>. Le chrome ne fait
    * que la placer : lui passer les données le rendrait bloquant pour toutes
@@ -51,7 +54,7 @@ export function SiteChrome({
         {children}
       </motion.main>
       <div className="contents print:hidden">
-        <Footer />
+        <Footer companySlot={companySlot} />
       </div>
 
       <MobileMenu />

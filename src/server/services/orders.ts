@@ -6,6 +6,7 @@ import { incrementStock } from "./stock";
 import { computeTotals, type Totals } from "./pricing";
 import { claimDiscountForOrder } from "./discounts";
 import { shippingForOrder } from "./shipping";
+import { currentVatRate } from "./company";
 import type { Address } from "@/lib/validation/address";
 
 /**
@@ -167,7 +168,8 @@ export async function createOrder(
     lines,
     discount,
     shipping,
-    vatRateBps: input.vatRateBps,
+    // Figé sur la commande : changer le taux demain ne touche pas celle-ci.
+    vatRateBps: input.vatRateBps ?? (await currentVatRate(tx)),
   });
 
   const items: OrderItemSnapshot[] = cart.items.map((item) => ({

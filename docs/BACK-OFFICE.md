@@ -50,6 +50,7 @@ commande, lot…).
 | **Codes promo**     | Créer, suspendre, suivre les utilisations           |
 | **Livraison**       | Changer un tarif de port, le seuil d'offre          |
 | **Messages**        | Les messages du formulaire de contact               |
+| **Réglages**        | Société, mentions légales, TVA, pays livrés         |
 | **Journal**         | Voir qui a modifié quoi, et quand                   |
 | **Sécurité**        | État de la double authentification                  |
 
@@ -309,6 +310,26 @@ liens, et n'accepte que 3 envois par 10 minutes depuis une même adresse.
 
 ---
 
+## Les réglages
+
+L'écran **Réglages** est la seule source des informations de la société :
+raison sociale, forme, capital, siège, SIRET, TVA intracommunautaire, RCS,
+directeur de la publication, contact, hébergeur.
+
+- Ce que tu enregistres apparaît **aussitôt** dans les mentions légales, les
+  CGV et le pied de page du site — et demain sur les factures.
+- Un champ laissé vide s'affiche « à compléter » sur le site. Rien n'est
+  jamais inventé à ta place. Un encadré rouge liste ce qui manque.
+- Le SIRET et le numéro de TVA sont **vérifiés** à la saisie : une faute de
+  frappe est refusée, et un numéro de TVA qui ne correspond pas au SIRET aussi
+  (le message donne le bon).
+- Le **taux de TVA** s'applique aux paniers et aux nouvelles commandes. Une
+  commande déjà passée garde le sien.
+- Chaque modification est inscrite au journal, avec l'ancienne et la nouvelle
+  valeur.
+
+---
+
 ## Ce qui manque encore
 
 - **Le remboursement depuis la fiche commande** — il arrive avec Stripe.
@@ -331,7 +352,9 @@ Quelques décisions ne peuvent venir que de la marque :
 - **Le seuil de livraison offerte** (49 € provisoirement), la grille
   tarifaire et le poids de l'emballage (150 g provisoirement). La grille se
   modifie dans **Livraison** ; le poids d'emballage demande un développeur.
-- **Les mentions légales réelles** : SIRET, capital, TVA intracommunautaire,
-  directeur de publication. Le site annonce aujourd'hui être propulsé par
-  Shopify — c'est **faux** et ça doit disparaître avant la mise en ligne.
+- **Les mentions légales réelles** : SIRET, capital, RCS, TVA
+  intracommunautaire, directeur de publication, adresse du siège. Elles se
+  saisissent dans **Réglages** ; tant qu'il en manque une, le site affiche
+  « à compléter » et l'écran Réglages te dit lesquelles. Bloquant pour la
+  mise en ligne.
 - **L'adresse du site** : avec ou sans `www`.
